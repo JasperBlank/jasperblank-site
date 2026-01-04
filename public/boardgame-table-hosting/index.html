@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boardgame Table Hosting</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">BG</div>
+      <div>
+        <p class="eyebrow">Find a table</p>
+        <h1>Boardgame Table Hosting</h1>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="host_btn" class="primary">Host a table</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Now hosting</p>
+        <h2>Jump into a game tonight</h2>
+        <p class="muted">See open tables, seats remaining, and who’s running the session. Want to run your own? Hit “Host a table.”</p>
+      </div>
+      <div class="stat">
+        <div class="label">Open tables</div>
+        <div class="value" id="open_count">0</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <div>
+          <h3>Hosted games</h3>
+          <p class="muted">Browse tables looking for players.</p>
+        </div>
+        <div class="filters">
+          <input id="filter_game" type="text" placeholder="Filter by game">
+          <input id="filter_city" type="text" placeholder="Filter by city">
+        </div>
+      </div>
+      <div id="table_list" class="list"></div>
+    </section>
+  </main>
+
+  <div id="host_panel" class="panel hidden">
+    <div class="panel-card">
+      <div class="panel-header">
+        <h3>Host a table</h3>
+        <button id="close_panel" class="ghost">×</button>
+      </div>
+      <form id="host_form">
+        <label for="game_name">Game</label>
+        <input id="game_name" type="text" required placeholder="Catan, Wingspan, Root">
+
+        <label for="host_name">Host name</label>
+        <input id="host_name" type="text" required placeholder="Your name">
+
+        <label for="city">City / venue</label>
+        <input id="city" type="text" placeholder="City, venue, or online">
+
+        <div class="grid-2">
+          <div>
+            <label for="date">Date</label>
+            <input id="date" type="date" required>
+          </div>
+          <div>
+            <label for="time">Time</label>
+            <input id="time" type="time" required>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label for="seats">Seats available</label>
+            <input id="seats" type="number" min="1" max="12" value="4">
+          </div>
+          <div>
+            <label for="duration">Duration (hrs)</label>
+            <input id="duration" type="number" min="1" max="8" value="2">
+          </div>
+        </div>
+
+        <label for="notes">Notes (optional)</label>
+        <textarea id="notes" rows="3" placeholder="Rules edition, bring snacks, etc."></textarea>
+
+        <div class="panel-actions">
+          <button type="button" id="cancel_host" class="ghost">Cancel</button>
+          <button type="submit" class="primary">Publish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
