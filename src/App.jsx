@@ -1,6 +1,6 @@
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
-import { Mail, FileText } from "lucide-react";
+import { Mail, FileText, ArrowUpRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 const user = "jasper.j.blank";
@@ -8,7 +8,15 @@ const domain = "gmail.com";
 
 export default function PersonalWebsite() {
   // Add your work as it grows
-  const projects = []; // { title, description, link }
+  const projects = [
+    {
+      title: "Hearo — Product Intelligence",
+      description:
+        "A RAG-based platform that ingests Reddit, App Store, and Hacker News conversations and turns them into cited, structured product intelligence. Built with FastAPI, Chroma vector store, and Claude (Anthropic) for synthesis.",
+      link: "/jasperblank-site/hearo/",
+      tags: ["Python", "RAG", "LLM", "React"],
+    },
+  ]; // { title, description, link, tags }
   const research = []; // { title, abstract, link }
 
   return (
@@ -66,9 +74,20 @@ export default function PersonalWebsite() {
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {p.description}
                     </p>
+                    {p.tags && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.tags.map((tag) => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {p.link && (
-                      <Button asChild size="sm">
-                        <a href={p.link}>View</a>
+                      <Button asChild size="sm" className="self-start">
+                        <a href={p.link} className="flex items-center gap-1.5">
+                          View project <ArrowUpRight size={14} />
+                        </a>
                       </Button>
                     )}
                   </CardContent>
