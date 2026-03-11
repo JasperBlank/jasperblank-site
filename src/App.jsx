@@ -13,7 +13,7 @@ export default function PersonalWebsite() {
       title: "Hearo — Product Intelligence",
       description:
         "A RAG-based platform that ingests Reddit, App Store, and Hacker News conversations and turns them into cited, structured product intelligence. Built with FastAPI, Chroma vector store, and Claude (Anthropic) for synthesis.",
-      link: "/jasperblank-site/hearo/",
+      link: "/hearo/",
       tags: ["Python", "RAG", "LLM", "React"],
     },
   ]; // { title, description, link, tags }
