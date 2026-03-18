@@ -16,6 +16,13 @@ export default function PersonalWebsite() {
       link: "/hearo/",
       tags: ["Python", "RAG", "LLM", "React"],
     },
+    {
+      title: "Hex Tic Tac Toe",
+      description:
+        "A strategic tic-tac-toe variant on an infinite hexagonal grid. Players alternate 2-move turns, racing to get 6 in a row. Features an AI opponent with lookahead and threat visualization.",
+      link: "/hex-tictactoe.html",
+      tags: ["JavaScript", "Canvas", "Game", "AI"],
+    },
   ]; // { title, description, link, tags }
   const research = []; // { title, abstract, link }
 

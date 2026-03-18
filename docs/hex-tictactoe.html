@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hexagonal Tic Tac Toe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background: #16213e;
+    z-index: 10;
+  }
+  #header h1 { font-size: 1.3rem; color: #e94560; }
+  #status {
+    font-size: 1.1rem;
+    text-align: center;
+  }
+  #status .player-x { color: #4fc3f7; }
+  #status .player-o { color: #ef5350; }
+  #btn-reset {
+    padding: 8px 18px;
+    background: #e94560;
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  #btn-reset:hover { background: #c73650; }
+  canvas {
+    flex: 1;
+    display: block;
+    cursor: grab;
+  }
+  canvas.placing { cursor: pointer; }
+  #win-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+  }
+  #win-overlay.show { display: flex; }
+  #win-box {
+    background: #16213e;
+    padding: 40px 60px;
+    border-radius: 16px;
+    text-align: center;
+    border: 2px solid #e94560;
+  }
+  #win-box h2 { font-size: 2rem; margin-bottom: 16px; }
+  #win-box button {
+    padding: 12px 32px;
+    background: #e94560;
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    margin-top: 12px;
+  }
+  /* Pick side overlay */
+  #pick-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+  }
+  #pick-overlay.show { display: flex; }
+  #pick-box {
+    background: #16213e;
+    padding: 40px 50px;
+    border-radius: 16px;
+    text-align: center;
+    border: 2px solid #e94560;
+    max-width: 440px;
+  }
+  #pick-box h2 { font-size: 1.8rem; margin-bottom: 8px; color: #fff; }
+  #pick-box p { color: #aaa; margin-bottom: 24px; font-size: 0.95rem; }
+  #pick-buttons { display: flex; gap: 20px; justify-content: center; }
+  #pick-buttons button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 20px 32px;
+    border: 2px solid #2a3a5c;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  #pick-buttons button:hover { background: #1f2945; }
+  #pick-x:hover { border-color: #4fc3f7; }
+  #pick-o:hover { border-color: #ef5350; }
+  .pick-symbol { font-size: 2.4rem; font-weight: bold; }
+  .pick-symbol-x { color: #4fc3f7; }
+  .pick-symbol-o { color: #ef5350; }
+  .pick-hint { font-size: 0.8rem; color: #888; }
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>Hex Tic Tac Toe</h1>
+  <div id="status"></div>
+  <button id="btn-reset" onclick="resetGame()">New Game</button>
+</div>
+<canvas id="canvas"></canvas>
+<div id="win-overlay">
+  <div id="win-box">
+    <h2 id="win-msg"></h2>
+    <button onclick="showPickSide()">Play Again</button>
+  </div>
+</div>
+<div id="pick-overlay" class="show">
+  <div id="pick-box">
+    <h2>Choose your side</h2>
+    <p>X goes first (1 move), then turns alternate with 2 moves each.</p>
+    <div id="pick-buttons">
+      <button id="pick-x" onclick="startGame('X')">
+        <span class="pick-symbol pick-symbol-x">X</span>
+        <span>Play as X</span>
+        <span class="pick-hint">You go first</span>
+      </button>
+      <button id="pick-o" onclick="startGame('O')">
+        <span class="pick-symbol pick-symbol-o">O</span>
+        <span>Play as O</span>
+        <span class="pick-hint">Bot goes first</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const winOverlay = document.getElementById('win-overlay');
+const winMsg = document.getElementById('win-msg');
+
+// Hex geometry (flat-top)
+const HEX_SIZE = 32;
+const sqrt3 = Math.sqrt(3);
+
+// Camera
+let camX = 0, camY = 0, zoom = 1;
+let dragging = false, dragStartX, dragStartY, camStartX, camStartY;
+
+// Game state
+let board = {}; // "q,r" -> "X" or "O"
+let currentPlayer = 'X';
+let movesLeft = 1; // X starts with 1 move
+let movesPerTurn = 1; // first turn is 1, then 2
+let gameOver = false;
+let winLine = null; // array of {q,r} for highlight
+let botEnabled = true;
+let botThinking = false;
+let botPlayer = 'O';
+let humanPlayer = 'X';
+let gameStarted = false;
+
+const pickOverlay = document.getElementById('pick-overlay');
+
+function key(q, r) { return q + ',' + r; }
+
+function showPickSide() {
+  winOverlay.classList.remove('show');
+  pickOverlay.classList.add('show');
+  gameStarted = false;
+}
+
+function startGame(side) {
+  humanPlayer = side;
+  botPlayer = side === 'X' ? 'O' : 'X';
+  board = {};
+  currentPlayer = 'X';
+  movesLeft = 1;
+  movesPerTurn = 1;
+  gameOver = false;
+  winLine = null;
+  botThinking = false;
+  camX = 0; camY = 0; zoom = 1;
+  gameStarted = true;
+  pickOverlay.classList.remove('show');
+  winOverlay.classList.remove('show');
+  updateStatus();
+  draw();
+  // If bot is X, it goes first
+  if (botPlayer === 'X') {
+    scheduleBotMove();
+  }
+}
+
+function resetGame() {
+  showPickSide();
+}
+
+function updateStatus() {
+  if (!gameStarted) { statusEl.innerHTML = ''; return; }
+  if (gameOver) { statusEl.innerHTML = ''; return; }
+  const isBot = currentPlayer === botPlayer;
+  const label = isBot ? 'Bot' : 'You';
+  const cls = currentPlayer === 'X' ? 'player-x' : 'player-o';
+  const thinking = isBot ? ' — thinking...' : ` — ${movesLeft} move${movesLeft > 1 ? 's' : ''} left`;
+  statusEl.innerHTML = `<span class="${cls}">${currentPlayer} (${label})</span>${thinking}`;
+}
+
+// Hex <-> pixel (flat-top)
+function hexToPixel(q, r) {
+  const x = HEX_SIZE * (3/2 * q);
+  const y = HEX_SIZE * (sqrt3/2 * q + sqrt3 * r);
+  return { x, y };
+}
+
+function pixelToHex(px, py) {
+  const q = (2/3 * px) / HEX_SIZE;
+  const r = (-1/3 * px + sqrt3/3 * py) / HEX_SIZE;
+  return hexRound(q, r);
+}
+
+function hexRound(qf, rf) {
+  const sf = -qf - rf;
+  let q = Math.round(qf), r = Math.round(rf), s = Math.round(sf);
+  const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s - sf);
+  if (dq > dr && dq > ds) q = -r - s;
+  else if (dr > ds) r = -q - s;
+  return { q, r };
+}
+
+// Draw hex
+function drawHex(cx, cy, size, fill, stroke, lineWidth) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 180 * (60 * i);
+    const x = cx + size * Math.cos(angle);
+    const y = cy + size * Math.sin(angle);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth || 1; ctx.stroke(); }
+}
+
+// Six directions for win checking
+const DIRS = [
+  { dq: 1, dr: 0 },  // east
+  { dq: 0, dr: 1 },  // SE
+  { dq: -1, dr: 1 }, // SW
+];
+
+function checkWin(q, r, player) {
+  for (const dir of DIRS) {
+    let cells = [{ q, r }];
+    // forward
+    for (let i = 1; i < 6; i++) {
+      const nq = q + dir.dq * i, nr = r + dir.dr * i;
+      if (board[key(nq, nr)] === player) cells.push({ q: nq, r: nr });
+      else break;
+    }
+    // backward
+    for (let i = 1; i < 6; i++) {
+      const nq = q - dir.dq * i, nr = r - dir.dr * i;
+      if (board[key(nq, nr)] === player) cells.unshift({ q: nq, r: nr });
+      else break;
+    }
+    if (cells.length >= 6) return cells.slice(0, 6);
+  }
+  return null;
+}
+
+// ── Threat detection ──
+// Check how much space is available in a direction from a run's edge
+// Counts empty + friendly cells (not opponent) up to `need` steps
+function countSpace(q, r, dq, dr, player, need) {
+  let count = 0;
+  for (let i = 0; i < need; i++) {
+    const cell = board[key(q + dq * (i + 1), r + dr * (i + 1))];
+    if (cell === player || cell === undefined) count++;
+    else break; // opponent blocks
+  }
+  return count;
+}
+
+// Check if a run of `len` pieces has enough room to reach 6
+function hasSpaceForSix(startQ, startR, dq, dr, len, player) {
+  const need = 6 - len;
+  // Space before the run
+  const spaceBefore = countSpace(startQ, startR, -dq, -dr, player, need);
+  // Space after the run
+  const endQ = startQ + dq * (len - 1);
+  const endR = startR + dr * (len - 1);
+  const spaceAfter = countSpace(endQ, endR, dq, dr, player, need);
+  return (spaceBefore + spaceAfter) >= need;
+}
+
+function findThreats() {
+  const threats = [];
+  const checked = new Set();
+
+  for (const k of Object.keys(board)) {
+    const player = board[k];
+    const [q, r] = k.split(',').map(Number);
+
+    for (const dir of DIRS) {
+      // Walk backward to find the start of this run
+      let startQ = q, startR = r;
+      while (board[key(startQ - dir.dq, startR - dir.dr)] === player) {
+        startQ -= dir.dq;
+        startR -= dir.dr;
+      }
+      const runKey = `${startQ},${startR},${dir.dq},${dir.dr},${player}`;
+      if (checked.has(runKey)) continue;
+      checked.add(runKey);
+
+      // Collect the full run
+      const cells = [];
+      let cq = startQ, cr = startR;
+      while (board[key(cq, cr)] === player) {
+        cells.push({ q: cq, r: cr });
+        cq += dir.dq;
+        cr += dir.dr;
+      }
+
+      const len = cells.length;
+      if (len < 3) continue;
+
+      // Check if there's actually room to reach 6
+      if (!hasSpaceForSix(startQ, startR, dir.dq, dir.dr, len, player)) continue;
+
+      // Find open completion ends (empty cells at either end of the run)
+      const beforeQ = startQ - dir.dq, beforeR = startR - dir.dr;
+      const afterQ = cells[len-1].q + dir.dq, afterR = cells[len-1].r + dir.dr;
+      const beforeOpen = !board[key(beforeQ, beforeR)];
+      const afterOpen = !board[key(afterQ, afterR)];
+
+      const completions = [];
+      if (beforeOpen) completions.push({ q: beforeQ, r: beforeR });
+      if (afterOpen) completions.push({ q: afterQ, r: afterR });
+      if (completions.length === 0) continue;
+
+      if (len >= 4) {
+        // 4+ in a row → critical (one or two moves from winning)
+        threats.push({ player, cells, completions, severity: 'critical' });
+      } else if (len === 3) {
+        // 3 in a row with space → warning
+        threats.push({ player, cells, completions, severity: 'warning' });
+      }
+    }
+  }
+  return threats;
+}
+
+function placeMove(q, r) {
+  if (gameOver) return;
+  if (botEnabled && currentPlayer === botPlayer) return; // block clicks during bot turn
+  const k = key(q, r);
+  if (board[k]) return;
+
+  applyMove(q, r);
+}
+
+function applyMove(q, r) {
+  const k = key(q, r);
+  board[k] = currentPlayer;
+  movesLeft--;
+
+  const win = checkWin(q, r, currentPlayer);
+  if (win) {
+    gameOver = true;
+    winLine = win;
+    const col = currentPlayer === 'X' ? '#4fc3f7' : '#ef5350';
+    winMsg.innerHTML = `<span style="color:${col}">${currentPlayer}</span> wins!`;
+    updateStatus();
+    draw();
+    setTimeout(() => winOverlay.classList.add('show'), 300);
+    return;
+  }
+
+  if (movesLeft <= 0) {
+    currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+    if (movesPerTurn === 1) movesPerTurn = 2;
+    movesLeft = movesPerTurn;
+  }
+
+  updateStatus();
+  draw();
+
+  // Trigger bot if it's bot's turn
+  if (botEnabled && currentPlayer === botPlayer && !gameOver) {
+    scheduleBotMove();
+  }
+}
+
+// ── Bot AI ──
+
+const ALL_DIRS = [
+  { dq: 1, dr: 0 }, { dq: -1, dr: 0 },
+  { dq: 0, dr: 1 }, { dq: 0, dr: -1 },
+  { dq: -1, dr: 1 }, { dq: 1, dr: -1 },
+];
+
+function getNeighbors(q, r) {
+  return ALL_DIRS.map(d => ({ q: q + d.dq, r: r + d.dr }));
+}
+
+// Get all empty cells adjacent to any occupied cell (candidate moves)
+function getCandidates() {
+  const candidates = new Set();
+  for (const k of Object.keys(board)) {
+    const [q, r] = k.split(',').map(Number);
+    for (const n of getNeighbors(q, r)) {
+      const nk = key(n.q, n.r);
+      if (!board[nk]) candidates.add(nk);
+    }
+    // Also check 2-away for better reach
+    for (const d of ALL_DIRS) {
+      const nq = q + d.dq * 2, nr = r + d.dr * 2;
+      const nk = key(nq, nr);
+      if (!board[nk]) candidates.add(nk);
+    }
+  }
+  if (candidates.size === 0) candidates.add('0,0');
+  return [...candidates].map(k => {
+    const [q, r] = k.split(',').map(Number);
+    return { q, r };
+  });
+}
+
+// Count consecutive pieces in a direction from (q,r) for player
+function countDir(q, r, dq, dr, player) {
+  let count = 0;
+  for (let i = 1; i <= 6; i++) {
+    if (board[key(q + dq * i, r + dr * i)] === player) count++;
+    else break;
+  }
+  return count;
+}
+
+// Get the full run length if we place at (q,r) for player, in a given direction
+function lineLength(q, r, dq, dr, player) {
+  return 1 + countDir(q, r, dq, dr, player) + countDir(q, r, -dq, -dr, player);
+}
+
+// Check if placing at (q,r) for player in direction (dq,dr) has room to reach 6
+function lineFeasible(q, r, dq, dr, player) {
+  // Find the start of the run that would include (q,r)
+  let startQ = q, startR = r;
+  while (board[key(startQ - dq, startR - dr)] === player) {
+    startQ -= dq; startR -= dr;
+  }
+  const len = lineLength(q, r, dq, dr, player);
+  return hasSpaceForSix(startQ, startR, dq, dr, len, player);
+}
+
+// Count how many distinct directions would become a 4-in-a-row if we place here
+function countFoursCreated(q, r, player) {
+  let fours = 0;
+  for (const dir of DIRS) {
+    const len = lineLength(q, r, dir.dq, dir.dr, player);
+    if (len === 4 && lineFeasible(q, r, dir.dq, dir.dr, player)) {
+      fours++;
+    }
+  }
+  return fours;
+}
+
+// Score a candidate cell for placing `player`
+function scoreMove(q, r, player) {
+  const opponent = player === 'X' ? 'O' : 'X';
+  let score = 0;
+
+  let myFours = 0;
+  let myThrees = 0;
+
+  for (const dir of DIRS) {
+    const myLen = lineLength(q, r, dir.dq, dir.dr, player);
+    const feasible = lineFeasible(q, r, dir.dq, dir.dr, player);
+
+    // Offense
+    if (myLen >= 6) return 100000; // instant win
+    if (feasible) {
+      if (myLen === 5) score += 50000; // one away from 6 — go for it
+      else if (myLen === 4) { score += 2000; myFours++; }
+      else if (myLen === 3) { score += 100; myThrees++; }
+      else if (myLen === 2) score += 15;
+    }
+
+    // Defense: how long would opponent's line be if they placed here?
+    const oppLen = lineLength(q, r, dir.dq, dir.dr, opponent);
+    const oppFeasible = lineFeasible(q, r, dir.dq, dir.dr, opponent);
+    if (oppFeasible) {
+      if (oppLen >= 6) score += 90000;  // must block win
+      else if (oppLen === 5) score += 40000; // must block near-win
+      else if (oppLen === 4) score += 1500;  // block their 4
+      else if (oppLen === 3) score += 60;    // block their 3
+    }
+  }
+
+  // Big bonus for creating multiple 4-in-a-rows at once (fork)
+  // This is the key strategy: overlapping 4s are very hard to defend
+  if (myFours >= 2) score += 15000;
+  else if (myFours === 1 && myThrees >= 1) score += 5000;
+
+  // Slight preference for cells near the center of mass of own pieces
+  let sumQ = 0, sumR = 0, count = 0;
+  for (const k of Object.keys(board)) {
+    if (board[k] === player) {
+      const [bq, br] = k.split(',').map(Number);
+      sumQ += bq; sumR += br; count++;
+    }
+  }
+  if (count > 0) {
+    const dist = Math.abs(q - sumQ / count) + Math.abs(r - sumR / count);
+    score -= dist * 2;
+  }
+
+  // Small random tiebreaker
+  score += Math.random() * 3;
+
+  return score;
+}
+
+// Get candidates scoped near a set of relevant cells (for lookahead perf)
+function getCandidatesNear(extraCells) {
+  const candidates = new Set();
+  const sources = Object.keys(board);
+  for (const ec of extraCells) sources.push(key(ec.q, ec.r));
+  for (const k of sources) {
+    const [q, r] = k.split(',').map(Number);
+    for (const d of ALL_DIRS) {
+      for (let dist = 1; dist <= 2; dist++) {
+        const nk = key(q + d.dq * dist, r + d.dr * dist);
+        if (!board[nk]) candidates.add(nk);
+      }
+    }
+  }
+  if (candidates.size === 0) candidates.add('0,0');
+  return [...candidates].map(k => {
+    const [cq, cr] = k.split(',').map(Number);
+    return { q: cq, r: cr };
+  });
+}
+
+// Simulate placing a piece, run a callback, then undo
+function simPlace(q, r, player, fn) {
+  const k = key(q, r);
+  board[k] = player;
+  const result = fn();
+  delete board[k];
+  return result;
+}
+
+// Check if placing at (q,r) for player is an instant win
+function isWinMove(q, r, player) {
+  for (const dir of DIRS) {
+    if (lineLength(q, r, dir.dq, dir.dr, player) >= 6) return true;
+  }
+  return false;
+}
+
+// Evaluate board state score from bot's perspective
+function evalBoard(player) {
+  const opponent = player === 'X' ? 'O' : 'X';
+  let score = 0;
+  const checked = new Set();
+  for (const k of Object.keys(board)) {
+    const p = board[k];
+    const [q, r] = k.split(',').map(Number);
+    for (const dir of DIRS) {
+      let sq = q, sr = r;
+      while (board[key(sq - dir.dq, sr - dir.dr)] === p) { sq -= dir.dq; sr -= dir.dr; }
+      const rk = `${sq},${sr},${dir.dq},${dir.dr}`;
+      if (checked.has(rk)) continue;
+      checked.add(rk);
+      let len = 0;
+      let cq = sq, cr = sr;
+      while (board[key(cq, cr)] === p) { len++; cq += dir.dq; cr += dir.dr; }
+      if (len < 2) continue;
+      if (!hasSpaceForSix(sq, sr, dir.dq, dir.dr, len, p)) continue;
+      const val = len === 5 ? 8000 : len === 4 ? 600 : len === 3 ? 60 : 8;
+      score += (p === player) ? val : -val;
+    }
+  }
+  return score;
+}
+
+// Bot picks both moves for its turn with 1-move lookahead
+function botPickMoves() {
+  const player = botPlayer;
+  const opponent = player === 'X' ? 'O' : 'X';
+  const hasTwo = movesLeft >= 2;
+
+  if (!hasTwo) {
+    // Single move (first turn only) — use lookahead: place, then evaluate opponent's best response
+    const candidates = getCandidates();
+    let bestScore = -Infinity;
+    let bestMove = candidates[0];
+
+    for (const c of candidates) {
+      let s = simPlace(c.q, c.r, player, () => {
+        if (isWinMove(c.q, c.r, player)) return 200000;
+        // Opponent gets 2 moves — simulate their best pair
+        const oppCands = getCandidatesNear([c]);
+        let oppBestVal = -Infinity;
+        // Just check opponent's single best move (full pair sim too expensive for 1-move turn)
+        for (const o of oppCands) {
+          if (board[key(o.q, o.r)]) continue;
+          const oval = scoreMove(o.q, o.r, opponent);
+          if (oval > oppBestVal) oppBestVal = oval;
+        }
+        return scoreMove(c.q, c.r, player) - oppBestVal * 0.3;
+      });
+      if (s > bestScore) { bestScore = s; bestMove = c; }
+    }
+    return [bestMove];
+  }
+
+  // Two moves — try all pairs with lookahead
+  const candidates = getCandidates();
+  // Pre-score and take top N to keep it fast
+  const scored = candidates.map(c => ({ ...c, s: scoreMove(c.q, c.r, player) }));
+  scored.sort((a, b) => b.s - a.s);
+  const topN = scored.slice(0, 25);
+
+  let bestScore = -Infinity;
+  let bestPair = [topN[0], topN[1] || topN[0]];
+
+  for (const m1 of topN) {
+    simPlace(m1.q, m1.r, player, () => {
+      if (isWinMove(m1.q, m1.r, player)) {
+        if (200000 > bestScore) { bestScore = 200000; bestPair = [m1]; }
+        return;
+      }
+
+      // Get candidates for second move
+      const cands2 = getCandidatesNear([m1]);
+      const scored2 = cands2
+        .filter(c => !board[key(c.q, c.r)])
+        .map(c => ({ ...c, s: scoreMove(c.q, c.r, player) }));
+      scored2.sort((a, b) => b.s - a.s);
+      const top2 = scored2.slice(0, 20);
+
+      for (const m2 of top2) {
+        const pairScore = simPlace(m2.q, m2.r, player, () => {
+          if (isWinMove(m2.q, m2.r, player)) return 200000;
+
+          // Now evaluate: what's the opponent's best response (their 2 moves)?
+          const oppCands = getCandidatesNear([m1, m2]);
+          let oppBest = -Infinity;
+          const oppScored = oppCands
+            .filter(c => !board[key(c.q, c.r)])
+            .map(c => ({ ...c, s: scoreMove(c.q, c.r, opponent) }));
+          oppScored.sort((a, b) => b.s - a.s);
+          const oppTop = oppScored.slice(0, 10);
+
+          for (const o1 of oppTop) {
+            const o1Score = simPlace(o1.q, o1.r, opponent, () => {
+              if (isWinMove(o1.q, o1.r, opponent)) return 150000;
+              // Opponent's second move
+              const oppCands2 = getCandidatesNear([o1]);
+              let best2 = 0;
+              for (const o2 of oppCands2) {
+                if (board[key(o2.q, o2.r)]) continue;
+                const s2 = scoreMove(o2.q, o2.r, opponent);
+                if (s2 > best2) best2 = s2;
+              }
+              return scoreMove(o1.q, o1.r, opponent) + best2 * 0.5;
+            });
+            if (o1Score > oppBest) oppBest = o1Score;
+          }
+
+          // Our board eval minus opponent's best response
+          return evalBoard(player) - oppBest * 0.4;
+        });
+
+        if (pairScore > bestScore) {
+          bestScore = pairScore;
+          bestPair = [m1, m2];
+        }
+      }
+    });
+    // Early exit if we found a win
+    if (bestScore >= 200000) break;
+  }
+
+  return bestPair;
+}
+
+function scheduleBotMove() {
+  if (botThinking || gameOver) return;
+  botThinking = true;
+  setTimeout(() => {
+    if (gameOver || currentPlayer !== botPlayer) { botThinking = false; return; }
+    const moves = botPickMoves();
+
+    // Play first move
+    applyMove(moves[0].q, moves[0].r);
+
+    // Play second move if we have one and it's still our turn
+    if (moves.length > 1 && !gameOver && currentPlayer === botPlayer && movesLeft > 0) {
+      setTimeout(() => {
+        if (gameOver || currentPlayer !== botPlayer) { botThinking = false; return; }
+        applyMove(moves[1].q, moves[1].r);
+        botThinking = false;
+      }, 350);
+    } else {
+      botThinking = false;
+    }
+  }, 400);
+}
+
+// Rendering
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - document.getElementById('header').offsetHeight;
+  draw();
+}
+
+function draw() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(w / 2 + camX * zoom, h / 2 + camY * zoom);
+  ctx.scale(zoom, zoom);
+
+  // Determine visible hex range
+  const viewLeft = (-w/2 - camX * zoom) / zoom;
+  const viewRight = (w/2 - camX * zoom) / zoom;
+  const viewTop = (-h/2 - camY * zoom) / zoom;
+  const viewBottom = (h/2 - camY * zoom) / zoom;
+
+  const margin = HEX_SIZE * 2;
+  const minQ = Math.floor((viewLeft - margin) / (HEX_SIZE * 1.5)) - 1;
+  const maxQ = Math.ceil((viewRight + margin) / (HEX_SIZE * 1.5)) + 1;
+  const minR = Math.floor((viewTop - margin) / (HEX_SIZE * sqrt3)) - 2;
+  const maxR = Math.ceil((viewBottom + margin) / (HEX_SIZE * sqrt3)) + 2;
+
+  // Draw grid
+  for (let q = minQ; q <= maxQ; q++) {
+    for (let r = minR; r <= maxR; r++) {
+      const { x, y } = hexToPixel(q, r);
+      if (x < viewLeft - margin || x > viewRight + margin ||
+          y < viewTop - margin || y > viewBottom + margin) continue;
+      drawHex(x, y, HEX_SIZE - 1, '#1f2945', '#2a3a5c', 1);
+    }
+  }
+
+  // Draw pieces
+  for (const [k, player] of Object.entries(board)) {
+    const [q, r] = k.split(',').map(Number);
+    const { x, y } = hexToPixel(q, r);
+    const isWinCell = winLine && winLine.some(c => c.q === q && c.r === r);
+    if (player === 'X') {
+      drawHex(x, y, HEX_SIZE - 1, isWinCell ? '#0288d1' : '#1a3a5c', '#4fc3f7', 2);
+      drawX(x, y);
+    } else {
+      drawHex(x, y, HEX_SIZE - 1, isWinCell ? '#c62828' : '#4a1a1a', '#ef5350', 2);
+      drawO(x, y);
+    }
+  }
+
+  // Highlight threats (lines close to winning)
+  if (!gameOver) {
+    const threats = findThreats();
+    for (const threat of threats) {
+      const color = threat.player === 'X' ? '#4fc3f7' : '#ef5350';
+      const isCritical = threat.severity === 'critical';
+
+      // Draw glowing line through the threat cells
+      if (threat.cells.length >= 2) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = isCritical ? 4 : 2.5;
+        ctx.globalAlpha = isCritical ? 0.7 : 0.35;
+        ctx.setLineDash(isCritical ? [] : [6, 4]);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        // Extend line through completion cells too
+        const allCells = [...threat.cells];
+        for (const comp of threat.completions) {
+          // Insert at correct position (before or after)
+          const first = threat.cells[0];
+          const last = threat.cells[threat.cells.length - 1];
+          if (comp.q === first.q - (threat.cells[1].q - first.q) &&
+              comp.r === first.r - (threat.cells[1].r - first.r)) {
+            allCells.unshift(comp);
+          } else {
+            allCells.push(comp);
+          }
+        }
+        for (let i = 0; i < allCells.length; i++) {
+          const { x, y } = hexToPixel(allCells[i].q, allCells[i].r);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Draw pulsing highlight on completion cells (where to play to win)
+      for (const comp of threat.completions) {
+        const { x, y } = hexToPixel(comp.q, comp.r);
+        ctx.save();
+        ctx.globalAlpha = isCritical ? 0.5 : 0.2;
+        drawHex(x, y, HEX_SIZE - 1, color, null, 0);
+        ctx.restore();
+        // Draw a bright border on the completion hex
+        ctx.save();
+        ctx.globalAlpha = isCritical ? 0.9 : 0.45;
+        drawHex(x, y, HEX_SIZE - 1, null, color, isCritical ? 3 : 2);
+        ctx.restore();
+        // Draw "!" marker on critical threats
+        if (isCritical) {
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = color;
+          ctx.font = `bold ${HEX_SIZE * 0.6}px 'Segoe UI', sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('!', x, y);
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  // Highlight win line
+  if (winLine) {
+    ctx.strokeStyle = '#ffd740';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let i = 0; i < winLine.length; i++) {
+      const { x, y } = hexToPixel(winLine[i].q, winLine[i].r);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawX(cx, cy) {
+  const s = HEX_SIZE * 0.35;
+  ctx.strokeStyle = '#4fc3f7';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
+  ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
+  ctx.stroke();
+}
+
+function drawO(cx, cy) {
+  ctx.strokeStyle = '#ef5350';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, HEX_SIZE * 0.35, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// Input handling
+canvas.addEventListener('mousedown', e => {
+  dragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  camStartX = camX;
+  camStartY = camY;
+  canvas.classList.remove('placing');
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  camX = camStartX + (e.clientX - dragStartX) / zoom;
+  camY = camStartY + (e.clientY - dragStartY) / zoom;
+  draw();
+});
+
+canvas.addEventListener('mouseup', e => {
+  const dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+  dragging = false;
+  canvas.classList.add('placing');
+  if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+    // It's a click
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const worldX = (mx - canvas.width / 2) / zoom - camX;
+    const worldY = (my - canvas.height / 2) / zoom - camY;
+    const { q, r } = pixelToHex(worldX, worldY);
+    placeMove(q, r);
+  }
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  zoom = Math.max(0.3, Math.min(3, zoom * factor));
+  draw();
+}, { passive: false });
+
+// Touch support
+let lastTouchDist = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragging = true;
+    dragStartX = e.touches[0].clientX;
+    dragStartY = e.touches[0].clientY;
+    camStartX = camX;
+    camStartY = camY;
+  } else if (e.touches.length === 2) {
+    lastTouchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && dragging) {
+    camX = camStartX + (e.touches[0].clientX - dragStartX) / zoom;
+    camY = camStartY + (e.touches[0].clientY - dragStartY) / zoom;
+    draw();
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const factor = dist / lastTouchDist;
+    zoom = Math.max(0.3, Math.min(3, zoom * factor));
+    lastTouchDist = dist;
+    draw();
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  if (e.changedTouches.length === 1 && dragging) {
+    const dx = e.changedTouches[0].clientX - dragStartX;
+    const dy = e.changedTouches[0].clientY - dragStartY;
+    dragging = false;
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.changedTouches[0].clientX - rect.left;
+      const my = e.changedTouches[0].clientY - rect.top;
+      const worldX = (mx - canvas.width / 2) / zoom - camX;
+      const worldY = (my - canvas.height / 2) / zoom - camY;
+      const { q, r } = pixelToHex(worldX, worldY);
+      placeMove(q, r);
+    }
+  }
+});
+
+window.addEventListener('resize', resizeCanvas);
+canvas.classList.add('placing');
+resizeCanvas();
+// Game starts after picking a side — pick overlay is shown by default
+</script>
+</body>
+</html>
