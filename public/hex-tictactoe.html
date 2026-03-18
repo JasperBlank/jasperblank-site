@@ -113,10 +113,13 @@
   #pick-buttons button:hover { background: #1f2945; }
   #pick-x:hover { border-color: #4fc3f7; }
   #pick-o:hover { border-color: #ef5350; }
+  #pick-watch:hover { border-color: #ffd740; }
   .pick-symbol { font-size: 2.4rem; font-weight: bold; }
   .pick-symbol-x { color: #4fc3f7; }
   .pick-symbol-o { color: #ef5350; }
+  .pick-symbol-bot { color: #ffd740; }
   .pick-hint { font-size: 0.8rem; color: #888; }
+  #pick-buttons { flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -146,6 +149,11 @@
         <span class="pick-symbol pick-symbol-o">O</span>
         <span>Play as O</span>
         <span class="pick-hint">Bot goes first</span>
+      </button>
+      <button id="pick-watch" onclick="startGame('watch')">
+        <span class="pick-symbol pick-symbol-bot">AI</span>
+        <span>Bot vs Bot</span>
+        <span class="pick-hint">Watch the bots play</span>
       </button>
     </div>
   </div>
@@ -178,6 +186,7 @@ let botThinking = false;
 let botPlayer = 'O';
 let humanPlayer = 'X';
 let gameStarted = false;
+let botVsBot = false;
 
 const pickOverlay = document.getElementById('pick-overlay');
 
@@ -190,8 +199,14 @@ function showPickSide() {
 }
 
 function startGame(side) {
-  humanPlayer = side;
-  botPlayer = side === 'X' ? 'O' : 'X';
+  botVsBot = (side === 'watch');
+  if (botVsBot) {
+    humanPlayer = null;
+    botPlayer = null; // both are bots
+  } else {
+    humanPlayer = side;
+    botPlayer = side === 'X' ? 'O' : 'X';
+  }
   board = {};
   currentPlayer = 'X';
   movesLeft = 1;
@@ -205,8 +220,8 @@ function startGame(side) {
   winOverlay.classList.remove('show');
   updateStatus();
   draw();
-  // If bot is X, it goes first
-  if (botPlayer === 'X') {
+  // Start bot if it's a bot's turn
+  if (botVsBot || botPlayer === 'X') {
     scheduleBotMove();
   }
 }
@@ -215,14 +230,22 @@ function resetGame() {
   showPickSide();
 }
 
+function isBotTurn() {
+  return botVsBot || currentPlayer === botPlayer;
+}
+
 function updateStatus() {
   if (!gameStarted) { statusEl.innerHTML = ''; return; }
   if (gameOver) { statusEl.innerHTML = ''; return; }
-  const isBot = currentPlayer === botPlayer;
-  const label = isBot ? 'Bot' : 'You';
   const cls = currentPlayer === 'X' ? 'player-x' : 'player-o';
-  const thinking = isBot ? ' — thinking...' : ` — ${movesLeft} move${movesLeft > 1 ? 's' : ''} left`;
-  statusEl.innerHTML = `<span class="${cls}">${currentPlayer} (${label})</span>${thinking}`;
+  if (botVsBot) {
+    statusEl.innerHTML = `<span class="${cls}">${currentPlayer} (Bot)</span> — thinking...`;
+  } else {
+    const isBot = currentPlayer === botPlayer;
+    const label = isBot ? 'Bot' : 'You';
+    const thinking = isBot ? ' — thinking...' : ` — ${movesLeft} move${movesLeft > 1 ? 's' : ''} left`;
+    statusEl.innerHTML = `<span class="${cls}">${currentPlayer} (${label})</span>${thinking}`;
+  }
 }
 
 // Hex <-> pixel (flat-top)
@@ -372,6 +395,7 @@ function findThreats() {
 
 function placeMove(q, r) {
   if (gameOver) return;
+  if (botVsBot) return; // spectator mode — no clicks
   if (botEnabled && currentPlayer === botPlayer) return; // block clicks during bot turn
   const k = key(q, r);
   if (board[k]) return;
@@ -405,8 +429,8 @@ function applyMove(q, r) {
   updateStatus();
   draw();
 
-  // Trigger bot if it's bot's turn
-  if (botEnabled && currentPlayer === botPlayer && !gameOver) {
+  // Trigger bot if it's a bot's turn (only if not already mid-turn)
+  if (!gameOver && !botThinking && isBotTurn()) {
     scheduleBotMove();
   }
 }
@@ -604,9 +628,43 @@ function evalBoard(player) {
   return score;
 }
 
+// Fast greedy move picker (no lookahead) for bot-vs-bot
+function botPickMovesGreedy(activePlayer) {
+  const player = activePlayer;
+  const candidates = getCandidates();
+  const hasTwo = movesLeft >= 2;
+
+  // Score all and pick the best
+  let bestScore = -Infinity;
+  let bestMove = candidates[0];
+  for (const c of candidates) {
+    const s = scoreMove(c.q, c.r, player);
+    if (s > bestScore) { bestScore = s; bestMove = c; }
+  }
+
+  if (!hasTwo) return [bestMove];
+
+  // Pick second move greedily after simulating first
+  return simPlace(bestMove.q, bestMove.r, player, () => {
+    const cands2 = getCandidatesNear([bestMove]);
+    let best2Score = -Infinity;
+    let best2 = cands2[0];
+    for (const c of cands2) {
+      if (board[key(c.q, c.r)]) continue;
+      const s = scoreMove(c.q, c.r, player);
+      if (s > best2Score) { best2Score = s; best2 = c; }
+    }
+    return [bestMove, best2];
+  });
+}
+
 // Bot picks both moves for its turn with 1-move lookahead
-function botPickMoves() {
-  const player = botPlayer;
+function botPickMoves(activePlayer) {
+  const player = activePlayer || botPlayer;
+
+  // Bot-vs-bot: use fast greedy (no lookahead)
+  if (botVsBot) return botPickMovesGreedy(player);
+
   const opponent = player === 'X' ? 'O' : 'X';
   const hasTwo = movesLeft >= 2;
 
@@ -619,10 +677,8 @@ function botPickMoves() {
     for (const c of candidates) {
       let s = simPlace(c.q, c.r, player, () => {
         if (isWinMove(c.q, c.r, player)) return 200000;
-        // Opponent gets 2 moves — simulate their best pair
         const oppCands = getCandidatesNear([c]);
         let oppBestVal = -Infinity;
-        // Just check opponent's single best move (full pair sim too expensive for 1-move turn)
         for (const o of oppCands) {
           if (board[key(o.q, o.r)]) continue;
           const oval = scoreMove(o.q, o.r, opponent);
@@ -708,25 +764,32 @@ function botPickMoves() {
 
 function scheduleBotMove() {
   if (botThinking || gameOver) return;
+  const activePlayer = currentPlayer;
   botThinking = true;
+  const delay = botVsBot ? 80 : 400;
+  const delay2 = botVsBot ? 80 : 350;
   setTimeout(() => {
-    if (gameOver || currentPlayer !== botPlayer) { botThinking = false; return; }
-    const moves = botPickMoves();
+    if (gameOver || currentPlayer !== activePlayer) { botThinking = false; return; }
+    const moves = botPickMoves(activePlayer);
 
     // Play first move
     applyMove(moves[0].q, moves[0].r);
 
-    // Play second move if we have one and it's still our turn
-    if (moves.length > 1 && !gameOver && currentPlayer === botPlayer && movesLeft > 0) {
+    // Play second move if we have one and it's still this player's turn
+    if (moves.length > 1 && !gameOver && currentPlayer === activePlayer && movesLeft > 0) {
       setTimeout(() => {
-        if (gameOver || currentPlayer !== botPlayer) { botThinking = false; return; }
+        if (gameOver || currentPlayer !== activePlayer) { botThinking = false; return; }
         applyMove(moves[1].q, moves[1].r);
+        // Done with this turn — release and trigger next bot if needed
         botThinking = false;
-      }, 350);
+        if (!gameOver && isBotTurn()) scheduleBotMove();
+      }, delay2);
     } else {
+      // Done with this turn — release and trigger next bot if needed
       botThinking = false;
+      if (!gameOver && isBotTurn()) scheduleBotMove();
     }
-  }, 400);
+  }, delay);
 }
 
 // Rendering
@@ -743,24 +806,30 @@ function draw() {
   ctx.translate(w / 2 + camX * zoom, h / 2 + camY * zoom);
   ctx.scale(zoom, zoom);
 
-  // Determine visible hex range
+  // Determine visible hex range by checking all 4 screen corners
   const viewLeft = (-w/2 - camX * zoom) / zoom;
   const viewRight = (w/2 - camX * zoom) / zoom;
   const viewTop = (-h/2 - camY * zoom) / zoom;
   const viewBottom = (h/2 - camY * zoom) / zoom;
 
-  const margin = HEX_SIZE * 2;
-  const minQ = Math.floor((viewLeft - margin) / (HEX_SIZE * 1.5)) - 1;
-  const maxQ = Math.ceil((viewRight + margin) / (HEX_SIZE * 1.5)) + 1;
-  const minR = Math.floor((viewTop - margin) / (HEX_SIZE * sqrt3)) - 2;
-  const maxR = Math.ceil((viewBottom + margin) / (HEX_SIZE * sqrt3)) + 2;
+  const corners = [
+    pixelToHex(viewLeft, viewTop),
+    pixelToHex(viewRight, viewTop),
+    pixelToHex(viewLeft, viewBottom),
+    pixelToHex(viewRight, viewBottom),
+  ];
+  const pad = 3;
+  const minQ = Math.min(...corners.map(c => c.q)) - pad;
+  const maxQ = Math.max(...corners.map(c => c.q)) + pad;
+  const minR = Math.min(...corners.map(c => c.r)) - pad;
+  const maxR = Math.max(...corners.map(c => c.r)) + pad;
 
   // Draw grid
   for (let q = minQ; q <= maxQ; q++) {
     for (let r = minR; r <= maxR; r++) {
       const { x, y } = hexToPixel(q, r);
-      if (x < viewLeft - margin || x > viewRight + margin ||
-          y < viewTop - margin || y > viewBottom + margin) continue;
+      if (x < viewLeft - HEX_SIZE * 2 || x > viewRight + HEX_SIZE * 2 ||
+          y < viewTop - HEX_SIZE * 2 || y > viewBottom + HEX_SIZE * 2) continue;
       drawHex(x, y, HEX_SIZE - 1, '#1f2945', '#2a3a5c', 1);
     }
   }
