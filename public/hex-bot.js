@@ -833,6 +833,244 @@
     return null;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ── THREAT COST ANALYSIS ──
+  // Computes the total "forcing cost" — how many moves the opponent
+  // must spend to block ALL of a player's threats.
+  // If cost > 2, opponent can't block everything → forced win!
+  //
+  // Threat costs:
+  //  _OOOO_  (4 contiguous, both ends open) → cost 2
+  //  OO__OO  (gapped, blocks with 1 internal) → cost 1
+  //  _OOOOO  (5, one end open) → cost 1
+  //  _OOOOO_ (5, both ends open) → cost 2
+  //  OOO_OO  (5 in 6-window with gap) → cost 1
+  // ══════════════════════════════════════════════════════════════
+
+  function computeThreatCost(player) {
+    const pc = pCode(player);
+    const threats = []; // { blockCells: [nkey...], cost: number }
+    const windowChecked = new Set();
+
+    // Scan all 6-cell windows along each of 3 hex directions
+    // A window is a threat if it has 4+ own pieces and 0 opponent pieces
+    for (const [nk, v] of _fb) {
+      if (v !== pc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+
+      for (let di = 0; di < 3; di++) {
+        const dq = DIR3_DQ[di], dr = DIR3_DR[di];
+
+        // This piece can be in positions 0-5 of a 6-cell window
+        for (let offset = 0; offset < 6; offset++) {
+          const wq = pq - offset * dq, wr = pr - offset * dr;
+          const wk = nkey(wq, wr) * 4 + di;
+          if (windowChecked.has(wk)) continue;
+          windowChecked.add(wk);
+
+          // Count pieces in this 6-cell window
+          let ownCount = 0, blocked = false;
+          const emptyCells = []; // positions (0-5) of empty cells
+
+          for (let i = 0; i < 6; i++) {
+            const cell = _fb.get(nkey(wq + dq * i, wr + dr * i));
+            if (cell === pc) {
+              ownCount++;
+            } else if (cell !== undefined) {
+              blocked = true; break; // opponent piece = can never complete
+            } else {
+              emptyCells.push(i);
+            }
+          }
+
+          if (blocked || ownCount < 4) continue;
+
+          if (ownCount >= 5) {
+            // 5+ in window, 1 empty — win-in-1, cost 1 per gap
+            for (const pos of emptyCells) {
+              const bk = nkey(wq + dq * pos, wr + dr * pos);
+              threats.push({ blockCells: [bk], cost: 1 });
+            }
+          } else if (ownCount === 4) {
+            // 4 in window, 2 empty
+            const blockKeys = emptyCells.map(pos => nkey(wq + dq * pos, wr + dr * pos));
+            if (emptyCells[0] === 0 && emptyCells[1] === 5) {
+              // Both empties at the ends — must block BOTH → cost 2
+              threats.push({ blockCells: blockKeys, cost: 2 });
+            } else {
+              // At least one gap is internal — block any ONE gap → cost 1
+              threats.push({ blockCells: blockKeys, cost: 1 });
+            }
+          }
+        }
+      }
+    }
+
+    if (threats.length === 0) return { cost: 0, threats: [] };
+
+    // Compute minimum blocks needed via greedy set cover approximation
+    // Sort threats by cost descending, then try to cover them
+    threats.sort((a, b) => b.cost - a.cost);
+
+    let totalCost = 0;
+    const blockedCells = new Set(); // cells the opponent has "used" to block
+    const activeThreats = [];
+
+    for (const t of threats) {
+      // Check if this threat is already neutralized by a previous block
+      let neutralized = false;
+      for (const bk of t.blockCells) {
+        if (blockedCells.has(bk)) { neutralized = true; break; }
+      }
+      if (neutralized) continue;
+
+      activeThreats.push(t);
+      if (t.cost === 2) {
+        // Both cells must be blocked — uses 2 opponent moves
+        totalCost += 2;
+        for (const bk of t.blockCells) blockedCells.add(bk);
+      } else {
+        // Any ONE cell blocks it — opponent uses 1 move on the "best" cell
+        // (the one that also covers the most other threats)
+        // For simplicity, pick the first unblocked cell
+        totalCost += 1;
+        blockedCells.add(t.blockCells[0]);
+      }
+    }
+
+    return { cost: totalCost, threats: activeThreats };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── FORCING SEARCH ──
+  // Narrow but DEEP search over only forcing moves (threat-creating)
+  // and responses (blocking). Branching factor ~5-15 vs ~50 for full search.
+  // Can detect forced wins 6-10 turns ahead.
+  // ══════════════════════════════════════════════════════════════
+
+  // Find moves that create or extend threats (4+ in a row with space)
+  function getForcingMoves(player) {
+    const pc = pCode(player);
+    const candidates = getCandidates();
+    const fiveExtends = []; // moves that create 5+
+    const fourExtends = []; // moves that create 4
+
+    for (const c of candidates) {
+      if (_fb.has(nkey(c.q, c.r))) continue;
+      let best = 0;
+      for (let di = 0; di < 3; di++) {
+        const scan = lineScan(c.q, c.r, DIR3_DQ[di], DIR3_DR[di], pc);
+        const len = scan & 0xFF;
+        const feasible = scan & 0x100;
+        if (feasible) {
+          if (len >= 5 && len > best) best = 5;
+          else if (len >= 4 && best < 5) best = 4;
+          else if (len >= 3 && best < 4) best = 3;
+        }
+      }
+      if (best >= 5) fiveExtends.push(c);
+      else if (best >= 4) fourExtends.push(c);
+      else if (best >= 3) fourExtends.push(c); // 3s are pre-threats
+    }
+    return [...fiveExtends, ...fourExtends]; // prioritized: 5s first
+  }
+
+  // Get blocking moves against opponent threats
+  function getBlockingMoves(opponent) {
+    const { critical, urgent } = findMustBlocks(opponent);
+    const seen = new Set();
+    const blocks = [];
+    for (const b of critical) {
+      const bk = nkey(b.q, b.r);
+      if (!seen.has(bk) && !_fb.has(bk)) { seen.add(bk); blocks.push(b); }
+    }
+    for (const b of urgent) {
+      const bk = nkey(b.q, b.r);
+      if (!seen.has(bk) && !_fb.has(bk)) { seen.add(bk); blocks.push(b); }
+    }
+    return blocks;
+  }
+
+  let _forcingNodes = 0;
+
+  // Forcing search: alternating attacker (forcing moves) / defender (blocks)
+  // Returns score: WIN if forced win found, LOSS if opponent has forced win
+  function forcingSearch(attacker, turnPlayer, movesLeft, depth) {
+    if (depth <= 0) return 0;
+    _forcingNodes++;
+    if (_forcingNodes > 50000) return 0; // safety cutoff
+
+    const pc = pCode(turnPlayer);
+    const opp = turnPlayer === 'X' ? 'O' : 'X';
+    const isAttacker = (turnPlayer === attacker);
+
+    // Check if current player can win immediately
+    const winCands = getCandidates();
+    for (const c of winCands) {
+      if (_fb.has(nkey(c.q, c.r))) continue;
+      if (isWinMove(c.q, c.r, pc) && movesLeft >= 1) return isAttacker ? WIN : LOSS;
+    }
+
+    // At turn boundary (movesLeft = 0 equivalent → we're at the start of this turn)
+    // Check threat cost
+    const atkCost = computeThreatCost(attacker);
+    if (atkCost.cost > 2) return WIN; // attacker has unstoppable threats
+
+    const defPlayer = attacker === 'X' ? 'O' : 'X';
+    const defCost = computeThreatCost(defPlayer);
+    if (defCost.cost > 2) return LOSS; // defender has unstoppable counter-threats
+
+    // Get moves to try
+    let moves;
+    if (isAttacker) {
+      moves = getForcingMoves(turnPlayer);
+      if (moves.length > 12) moves = moves.slice(0, 12);
+    } else {
+      // Defender: blocks first, then counter-forcing moves
+      const blocks = getBlockingMoves(turnPlayer === 'X' ? 'O' : 'X');
+      const counterForcing = getForcingMoves(turnPlayer);
+      const seen = new Set(blocks.map(b => nkey(b.q, b.r)));
+      for (const m of counterForcing) {
+        const mk = nkey(m.q, m.r);
+        if (!seen.has(mk)) { seen.add(mk); blocks.push(m); }
+      }
+      moves = blocks;
+      if (moves.length > 10) moves = moves.slice(0, 10);
+    }
+
+    if (moves.length === 0) return 0; // no forcing moves
+
+    let bestVal = isAttacker ? -Infinity : Infinity;
+
+    for (const m of moves) {
+      if (_fb.has(nkey(m.q, m.r))) continue;
+
+      const v = simPlace(m.q, m.r, turnPlayer, () => {
+        if (isWinMove(m.q, m.r, pc)) return isAttacker ? WIN : LOSS;
+
+        const newML = movesLeft - 1;
+        if (newML > 0) {
+          // Same player's turn continues
+          return forcingSearch(attacker, turnPlayer, newML, depth - 1);
+        } else {
+          // Turn switches
+          return forcingSearch(attacker, opp, 2, depth - 1);
+        }
+      });
+
+      if (isAttacker) {
+        if (v > bestVal) bestVal = v;
+        if (bestVal >= WIN) return WIN; // found forced win, stop
+      } else {
+        if (v < bestVal) bestVal = v;
+        if (bestVal <= LOSS) return LOSS; // defender can force counter-win
+      }
+    }
+
+    return bestVal;
+  }
+
   // ── Fork-aware board evaluation (uses fast board) ──
   function evalBoard(player) {
     const pieceList = window.pieceList;
@@ -870,7 +1108,6 @@
 
     function evalSide(s) {
       let v = 0;
-      // Distilled weights: threes ×8, forks ×2, defense ×0.5
       v += s[5] * 20000;
       v += s[4] * 7500;
       v += s[3] * 4000;   // threes are fork builders
@@ -883,7 +1120,24 @@
       return v;
     }
 
-    return evalSide(lines[pc]) - evalSide(lines[opc]);
+    let base = evalSide(lines[pc]) - evalSide(lines[opc]);
+
+    // ── Threat cost bonus (forcing analysis) ──
+    // MASSIVE bonus when threat cost > 2 (unstoppable position)
+    const myPlayer = pc === P_X ? 'X' : 'O';
+    const oppPlayer = myPlayer === 'X' ? 'O' : 'X';
+    const myTC = computeThreatCost(myPlayer);
+    const oppTC = computeThreatCost(oppPlayer);
+
+    if (myTC.cost > 2) base += 500000;    // near-forced-win
+    else if (myTC.cost === 2) base += 80000; // very threatening
+    else if (myTC.cost === 1) base += 10000;
+
+    if (oppTC.cost > 2) base -= 500000;    // near-forced-loss
+    else if (oppTC.cost === 2) base -= 80000;
+    else if (oppTC.cost === 1) base -= 10000;
+
+    return base;
   }
 
   // ── Must-block safety (root only) ──
@@ -1228,6 +1482,57 @@
       window.botSearchDepth = 0; return winMoves;
     }
 
+    // ── Forcing search: detect forced wins/losses deep in threat space ──
+    // Search depth 16 = ~4 full turns of forcing moves (way deeper than alpha-beta)
+    _forcingNodes = 0;
+    const forcingResult = forcingSearch(player, player, hasTwo ? 2 : 1, 16);
+
+    if (forcingResult >= WIN) {
+      // We have a forced win via threats! Find the best forcing move pair.
+      const forcing = getForcingMoves(player);
+      if (forcing.length > 0) {
+        // Pick the forcing moves that lead to the highest threat cost
+        let bestForcing = null, bestTC = -1;
+        for (const m1 of forcing.slice(0, 8)) {
+          const tc = simPlace(m1.q, m1.r, player, () => {
+            if (isWinMove(m1.q, m1.r, pc)) return 999;
+            return computeThreatCost(player).cost;
+          });
+          if (tc > bestTC) { bestTC = tc; bestForcing = m1; }
+        }
+        if (bestForcing) {
+          if (!hasTwo) {
+            window.botNodesSearched = _forcingNodes; window.botPruned = 0;
+            window.botSearchDepth = 0;
+            return [bestForcing];
+          }
+          // Find best second forcing move
+          const result = simPlace(bestForcing.q, bestForcing.r, player, () => {
+            if (isWinMove(bestForcing.q, bestForcing.r, pc)) return bestForcing;
+            const forcing2 = getForcingMoves(player);
+            let best2 = null, best2TC = -1;
+            for (const m2 of forcing2.slice(0, 8)) {
+              if (_fb.has(nkey(m2.q, m2.r))) continue;
+              const tc2 = simPlace(m2.q, m2.r, player, () => {
+                if (isWinMove(m2.q, m2.r, pc)) return 999;
+                return computeThreatCost(player).cost;
+              });
+              if (tc2 > best2TC) { best2TC = tc2; best2 = m2; }
+            }
+            return best2;
+          });
+          if (result) {
+            window.botNodesSearched = _forcingNodes; window.botPruned = 0;
+            window.botSearchDepth = 0;
+            return [bestForcing, result];
+          }
+        }
+      }
+    }
+
+    // If opponent has a forced win via threats, we'll rely on the must-block system
+    // (the regular search + must-block will handle defensive play)
+
     const maxDepth = window.hardDepth || 4;
     _nodesSearched = 0;
     _pruned = 0;
@@ -1354,6 +1659,12 @@
     if (diff === 'easy') return botPickMovesGreedy(player);
     if (diff === 'medium') return botPickMovesMedium(player);
     return botPickMovesHard(player);
+  };
+
+  // Expose threat cost analysis for UI
+  window.computeThreatCost = function(player) {
+    syncFastBoard();
+    return computeThreatCost(player);
   };
 
   // ══════════════════════════════════════════════════════════════
@@ -1509,6 +1820,35 @@
       }
     }
 
+    // ── Threat cost analysis ──
+    const cpTC = computeThreatCost(cp);
+    const oppTC = computeThreatCost(opp);
+
+    // If current player has threat cost > 2: unstoppable after their turn ends
+    if (cpTC.cost > 2) {
+      return { player: cp, mateIn: 2, threats: cpTC.threats, type: 'unstoppable_threats',
+               detail: `Threat cost ${cpTC.cost} > 2 moves — opponent can't block all` };
+    }
+    if (oppTC.cost > 2) {
+      return { player: opp, mateIn: 2, threats: oppTC.threats, type: 'unstoppable_threats',
+               detail: `Threat cost ${oppTC.cost} > 2 moves — can't block all` };
+    }
+
+    // ── Forcing search: detect deep forced wins (up to ~4 turns ahead) ──
+    _forcingNodes = 0;
+    const cpForcing = forcingSearch(cp, cp, hasTwo ? 2 : 1, 12);
+    if (cpForcing >= WIN) {
+      return { player: cp, mateIn: 3, type: 'forcing',
+               detail: 'Forced win via threat sequence' };
+    }
+
+    _forcingNodes = 0;
+    const oppForcing = forcingSearch(opp, opp, 2, 12);
+    if (oppForcing >= WIN) {
+      return { player: opp, mateIn: 3, type: 'forcing',
+               detail: 'Opponent has forced win via threat sequence' };
+    }
+
     // ── Check four-threat forks (mate-in-3 heuristic) ──
     const cpFours = countFourThreats(cp);
     const oppFours = countFourThreats(opp);
@@ -1518,6 +1858,16 @@
     }
     if (oppFours.length >= 4) {
       return { player: opp, mateIn: 3, threats: oppFours, type: 'fork' };
+    }
+
+    // ── Report high threat cost (not yet forced, but dangerous) ──
+    if (cpTC.cost === 2) {
+      return { player: cp, mateIn: 4, type: 'high_threat',
+               detail: `Threat cost 2 — one more threat and it's over` };
+    }
+    if (oppTC.cost === 2) {
+      return { player: opp, mateIn: 4, type: 'high_threat',
+               detail: `Opponent threat cost 2 — dangerous` };
     }
 
     return null;
