@@ -232,6 +232,33 @@
       const nk = nkey(c.q, c.r);
       if (!seen.has(nk) && !_fb.has(nk)) { seen.add(nk); result.push(c); }
     }
+
+    // ── Island candidates: cells deliberately far from existing pieces ──
+    // Creating a separate island of pieces forces the opponent to defend
+    // in two distant locations, which they can't do with just 2 moves.
+    // We add a few "pioneer" cells at distance 4-6 from the nearest piece.
+    if (pieceList.length >= 4) {
+      const com = window.comCache;
+      const xc = com.X.n > 0 ? com.X.sq / com.X.n : 0;
+      const xr = com.X.n > 0 ? com.X.sr / com.X.n : 0;
+      const oc = com.O.n > 0 ? com.O.sq / com.O.n : 0;
+      const or2 = com.O.n > 0 ? com.O.sr / com.O.n : 0;
+      // Pick spots in 6 directions, distance 4-5 from center of mass
+      const cq = Math.round((xc + oc) / 2);
+      const cr = Math.round((xr + or2) / 2);
+      for (let d = 0; d < 6; d++) {
+        const dq = ALL_DQ[d], dr = ALL_DR[d];
+        for (let dist = 4; dist <= 6; dist++) {
+          const nq = cq + dq * dist, nr = cr + dr * dist;
+          const nk = nkey(nq, nr);
+          if (!seen.has(nk) && !_fb.has(nk)) {
+            seen.add(nk);
+            result.push({ q: nq, r: nr });
+          }
+        }
+      }
+    }
+
     if (result.length === 0) result.push({ q: 0, r: 0 });
     return result;
   }
@@ -297,22 +324,27 @@
     defensive:   [0.6, 1.4],
   };
 
-  // ── Tunable weight defaults (can be overridden via window._tuneWeights for distillation) ──
+  // ── Tunable weight defaults (distilled from deep search ground truth) ──
+  // Distillation results: four↓ three↑↑↑ fork↑ defense↓
+  //   four  ×0.75 → deep search doesn't overvalue single fours
+  //   three ×8    → threes ARE the path to forks in 2-move turns
+  //   fork  ×2    → fork combos are even more decisive than we thought
+  //   def   ×0.5  → blocking less panicky, focus on own threats
   const W_FIVE   = 20000;
-  const W_FOUR   = 10000;
-  const W_THREE  = 500;
+  const W_FOUR   = 7500;    // was 10000 — distilled ×0.75
+  const W_THREE  = 4000;    // was 500   — distilled ×8 (threes build forks!)
   const W_TWO    = 30;
-  const W_FORK   = 80000;
-  const W_4_3    = 25000;
-  const W_PRE_FORK = 10000;
-  const W_TRIPLE = 15000;
+  const W_FORK   = 160000;  // was 80000 — distilled ×2 (forks are king)
+  const W_4_3    = 50000;   // scaled up proportionally with fork
+  const W_PRE_FORK = 20000; // two threes = pre-fork, also scaled up
+  const W_TRIPLE = 30000;   // triple threat scaled up
   const W_BLOCK6 = 95000;
   const W_BLOCK5 = 85000;
-  const W_BLOCK4 = 85000;
+  const W_BLOCK4 = 42500;   // was 85000 — distilled ×0.5 (less panicky)
   const W_BLOCK3 = 300;
-  const W_OPP_FORK = 50000;
-  const W_OPP_43   = 15000;
-  const W_OPP_PRE  = 5000;
+  const W_OPP_FORK = 25000;  // was 50000 — distilled ×0.5
+  const W_OPP_43   = 7500;   // scaled with defense
+  const W_OPP_PRE  = 2500;   // scaled with defense
 
   function getWeights() {
     const tw = window._tuneWeights;
@@ -463,15 +495,16 @@
 
     function evalSide(s) {
       let v = 0;
-      v += s[5] * 25000;
-      v += s[4] * 12000;
-      v += s[3] * 500;
+      // Distilled weights: threes ×8, forks ×2, defense ×0.5
+      v += s[5] * 20000;
+      v += s[4] * 7500;
+      v += s[3] * 4000;   // threes are fork builders
       v += s[2] * 30;
-      if (s[4] >= 2)                    v += 80000;
-      if (s[4] >= 1 && s[3] >= 2)      v += 30000;
-      if (s[4] >= 1 && s[3] >= 1)      v += 15000;
-      if (s[3] >= 2)                    v += 8000;
-      if (s[3] >= 3)                    v += 20000;
+      if (s[4] >= 2)                    v += 160000;  // fork
+      if (s[4] >= 1 && s[3] >= 2)      v += 60000;
+      if (s[4] >= 1 && s[3] >= 1)      v += 50000;
+      if (s[3] >= 2)                    v += 20000;   // pre-fork
+      if (s[3] >= 3)                    v += 30000;   // triple threat
       return v;
     }
 
