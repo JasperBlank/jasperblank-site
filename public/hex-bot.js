@@ -1,11 +1,18 @@
-// ── Hex Tic Tac Toe — Bot AI (v4 — Stronger + Optimized) ──
+// ── Hex Tic Tac Toe — Bot AI (v5 — Search Intelligence) ──
 // Include this file to enable bot play. Remove it for human-vs-human tournament mode.
 //
-// v4 optimizations:
+// v5 improvements:
+//  - Transposition table (Zobrist hashing) — never re-evaluate same position
+//  - Killer move heuristic — remember cutoff-causing moves for better ordering
+//  - History heuristic — track globally good moves across entire search
+//  - Late Move Reduction (LMR) — search unpromising moves at reduced depth
+//  - Improved must-block: detects 3-in-a-row threats (urgent) + 4+ (critical)
+//  - Must-block uses BOTH moves when multiple threats exist
+// v4 base:
 //  - Fast numeric board (Map<int,int>) eliminates all string alloc in hot path
-//  - Combined lineScan: length + feasibility + openness in ONE pass (was 2 functions)
-//  - Must-block safety net only at root (not inside deep search nodes)
+//  - Combined lineScan: length + feasibility + openness in ONE pass
 //  - Accumulative scoring, iterative deepening, alpha-beta pruning
+//  - Distilled shape patterns + spatial features (46 parameters)
 
 (function() {
   'use strict';
@@ -28,9 +35,45 @@
   // Numeric key — same as before but used for _fb too
   function nkey(q, r) { return (q + 10000) + (r + 10000) * 20001; }
 
+  // ── Zobrist hashing (lazy-generated per cell×player) ──
+  const _zobristCache = new Map();
+  let _boardHash = 0;
+
+  function getZobrist(q, r, pc) {
+    const key = nkey(q, r) * 3 + pc; // pc is 1 or 2
+    let v = _zobristCache.get(key);
+    if (v === undefined) {
+      v = (Math.random() * 0xFFFFFFFF) >>> 0;
+      _zobristCache.set(key, v);
+    }
+    return v;
+  }
+
+  // Turn hashes: encode whose-turn + moves-left into the hash
+  const _turnHash = [];
+  for (let p = 0; p < 3; p++) {
+    _turnHash[p] = [];
+    for (let m = 0; m < 3; m++) {
+      _turnHash[p][m] = (Math.random() * 0xFFFFFFFF) >>> 0;
+    }
+  }
+
+  // ── Transposition table ──
+  const _tt = new Map();
+  const TT_MAX = 200000;
+  const TT_EXACT = 0, TT_LOWER = 1, TT_UPPER = 2;
+
+  // ── Killer moves (2 per ply level) ──
+  const _killers = [];
+  for (let i = 0; i < 30; i++) _killers.push([-1, -1]);
+
+  // ── History heuristic (move → accumulated score) ──
+  const _history = new Map();
+
   // Sync _fb from window.board at the start of each bot turn
   function syncFastBoard() {
     _fb.clear();
+    _boardHash = 0;
     const board = window.board;
     const keys = Object.keys(board);
     for (let i = 0; i < keys.length; i++) {
@@ -39,7 +82,9 @@
       if (!v) continue;
       const ci = k.indexOf(',');
       const q = +k.substring(0, ci), r = +k.substring(ci + 1);
-      _fb.set(nkey(q, r), v === 'X' ? P_X : P_O);
+      const pc = v === 'X' ? P_X : P_O;
+      _fb.set(nkey(q, r), pc);
+      _boardHash ^= getZobrist(q, r, pc);
     }
   }
 
@@ -115,19 +160,22 @@
     return (spaceBefore + spaceAfter >= need) ? (len | 0x100) : len;
   }
 
-  // Simulate place + undo — maintains BOTH boards + comCache
+  // Simulate place + undo — maintains BOTH boards + comCache + Zobrist hash
   function simPlace(q, r, player, fn) {
     const board = window.board;
     const comCache = window.comCache;
     const k = q + ',' + r;
     const nk = nkey(q, r);
     const pc = pCode(player);
+    const zh = getZobrist(q, r, pc);
     board[k] = player;
     _fb.set(nk, pc);
+    _boardHash ^= zh;
     comCache[player].sq += q; comCache[player].sr += r; comCache[player].n++;
     const result = fn();
     delete board[k];
     _fb.delete(nk);
+    _boardHash ^= zh;
     comCache[player].sq -= q; comCache[player].sr -= r; comCache[player].n--;
     return result;
   }
@@ -1034,8 +1082,22 @@
 
     if (depthRemaining <= 0) return evalBoard(rootPlayer);
 
+    // ── Transposition table lookup ──
+    const ttKey = _boardHash ^ _turnHash[pc][movesLeftInTurn];
+    const ttEntry = _tt.get(ttKey);
+    let ttBestNk = -1;
+    if (ttEntry && ttEntry.depth >= depthRemaining) {
+      if (ttEntry.flag === TT_EXACT) return ttEntry.value;
+      if (ttEntry.flag === TT_LOWER && ttEntry.value >= beta) return ttEntry.value;
+      if (ttEntry.flag === TT_UPPER && ttEntry.value <= alpha) return ttEntry.value;
+      // Even if we can't use the value, use the best move for ordering
+      ttBestNk = ttEntry.bestNk;
+    } else if (ttEntry) {
+      ttBestNk = ttEntry.bestNk;
+    }
+
     const width = currentPly <= 2 ? 7 : currentPly <= 4 ? 5 : currentPly <= 6 ? 4 : 3;
-    const useQuick = currentPly >= 6;
+    const useQuick = currentPly >= 8;
 
     const placed = _placedStack.slice(0, _placedLen);
     let raw;
@@ -1046,55 +1108,111 @@
     }
 
     const scored = [];
-    if (useQuick) {
-      for (let i = 0; i < raw.length; i++) {
-        const c = raw[i];
-        if (_fb.has(nkey(c.q, c.r))) continue;
-        scored.push({ q: c.q, r: c.r, s: quickScore(c.q, c.r, pc) });
-      }
-    } else {
-      for (let i = 0; i < raw.length; i++) {
-        const c = raw[i];
-        if (_fb.has(nkey(c.q, c.r))) continue;
-        scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, tp) });
+    const k1 = _killers[currentPly] ? _killers[currentPly][0] : -1;
+    const k2 = _killers[currentPly] ? _killers[currentPly][1] : -1;
+
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      const cnk = nkey(c.q, c.r);
+      if (_fb.has(cnk)) continue;
+      // Move ordering priority: TT best move > killers > history > eval score
+      let priority = 0;
+      if (cnk === ttBestNk) priority = 1000000;         // TT best move first
+      else if (cnk === k1) priority = 500000;            // killer 1
+      else if (cnk === k2) priority = 400000;            // killer 2
+      else priority = (_history.get(cnk) || 0);          // history score
+      if (useQuick) {
+        scored.push({ q: c.q, r: c.r, s: quickScore(c.q, c.r, pc) + priority });
+      } else {
+        scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, tp) + priority });
       }
     }
     scored.sort((a, b) => b.s - a.s);
     const len = Math.min(scored.length, width);
     if (len === 0) return evalBoard(rootPlayer);
 
+    const origAlpha = alpha;
     let bestVal = isMax ? -Infinity : Infinity;
+    let bestMoveNk = -1;
 
     for (let i = 0; i < len; i++) {
       const m = scored[i];
+      const mnk = nkey(m.q, m.r);
       _nodesSearched++;
       _placedStack[_placedLen] = m;
       _placedLen++;
 
-      const v = simPlace(m.q, m.r, tp, () => {
+      // ── Late Move Reduction: reduce depth for later moves at deep plies ──
+      let reduction = 0;
+      if (i >= 3 && currentPly >= 3 && depthRemaining >= 2 && movesLeftInTurn <= 1) {
+        reduction = 1; // search 1 ply shallower
+      }
+
+      let v = simPlace(m.q, m.r, tp, () => {
         if (isWinMove(m.q, m.r, pc)) return isMax ? WIN : LOSS;
         const newML = movesLeftInTurn - 1;
         if (newML > 0) {
-          return abSearch(tp, rootPlayer, depthRemaining, newML, currentPly + 1, alpha, beta);
-        } else if (depthRemaining <= 1) {
+          return abSearch(tp, rootPlayer, depthRemaining - reduction, newML, currentPly + 1, alpha, beta);
+        } else if (depthRemaining - reduction <= 1) {
           return evalBoard(rootPlayer);
         } else {
-          return abSearch(opp, rootPlayer, depthRemaining - 1, 2, currentPly + 1, alpha, beta);
+          return abSearch(opp, rootPlayer, depthRemaining - 1 - reduction, 2, currentPly + 1, alpha, beta);
         }
       });
+
+      // Re-search at full depth if reduced search found something interesting
+      if (reduction > 0) {
+        if ((isMax && v > alpha) || (!isMax && v < beta)) {
+          v = simPlace(m.q, m.r, tp, () => {
+            if (isWinMove(m.q, m.r, pc)) return isMax ? WIN : LOSS;
+            const newML = movesLeftInTurn - 1;
+            if (newML > 0) {
+              return abSearch(tp, rootPlayer, depthRemaining, newML, currentPly + 1, alpha, beta);
+            } else if (depthRemaining <= 1) {
+              return evalBoard(rootPlayer);
+            } else {
+              return abSearch(opp, rootPlayer, depthRemaining - 1, 2, currentPly + 1, alpha, beta);
+            }
+          });
+        }
+      }
 
       _placedLen--;
 
       if (isMax) {
-        if (v > bestVal) bestVal = v;
+        if (v > bestVal) { bestVal = v; bestMoveNk = mnk; }
         if (bestVal > alpha) alpha = bestVal;
-        if (alpha >= beta) { _pruned++; break; }
+        if (alpha >= beta) {
+          _pruned++;
+          // Store killer move
+          if (currentPly < _killers.length && mnk !== _killers[currentPly][0]) {
+            _killers[currentPly][1] = _killers[currentPly][0];
+            _killers[currentPly][0] = mnk;
+          }
+          // Update history
+          _history.set(mnk, (_history.get(mnk) || 0) + depthRemaining * depthRemaining);
+          break;
+        }
       } else {
-        if (v < bestVal) bestVal = v;
+        if (v < bestVal) { bestVal = v; bestMoveNk = mnk; }
         if (bestVal < beta) beta = bestVal;
-        if (alpha >= beta) { _pruned++; break; }
+        if (alpha >= beta) {
+          _pruned++;
+          if (currentPly < _killers.length && mnk !== _killers[currentPly][0]) {
+            _killers[currentPly][1] = _killers[currentPly][0];
+            _killers[currentPly][0] = mnk;
+          }
+          _history.set(mnk, (_history.get(mnk) || 0) + depthRemaining * depthRemaining);
+          break;
+        }
       }
     }
+
+    // ── Store in transposition table ──
+    const flag = bestVal <= origAlpha ? TT_UPPER : bestVal >= beta ? TT_LOWER : TT_EXACT;
+    if (_tt.size >= TT_MAX) _tt.clear(); // simple eviction
+    _tt.set(ttKey, { depth: depthRemaining, value: bestVal, flag, bestNk: bestMoveNk });
+
     return bestVal;
   }
 
@@ -1115,6 +1233,11 @@
     _pruned = 0;
     _placedLen = 0;
     window.botSearchDepth = maxDepth;
+
+    // Clear search tables for fresh search
+    _tt.clear();
+    _history.clear();
+    for (let i = 0; i < _killers.length; i++) { _killers[i][0] = -1; _killers[i][1] = -1; }
 
     // Inject block cells into candidates so the search considers them
     const candidates = getCandidates();
