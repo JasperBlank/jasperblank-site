@@ -324,35 +324,100 @@
     defensive:   [0.6, 1.4],
   };
 
-  // ── Tunable weight defaults (distilled from deep search ground truth) ──
-  // Distillation results: four↓ three↑↑↑ fork↑ defense↓
-  //   four  ×0.75 → deep search doesn't overvalue single fours
-  //   three ×8    → threes ARE the path to forks in 2-move turns
-  //   fork  ×2    → fork combos are even more decisive than we thought
-  //   def   ×0.5  → blocking less panicky, focus on own threats
-  const W_FIVE   = 20000;
-  const W_FOUR   = 7500;    // was 10000 — distilled ×0.75
-  const W_THREE  = 4000;    // was 500   — distilled ×8 (threes build forks!)
-  const W_TWO    = 30;
-  const W_FORK   = 160000;  // was 80000 — distilled ×2 (forks are king)
-  const W_4_3    = 50000;   // scaled up proportionally with fork
-  const W_PRE_FORK = 20000; // two threes = pre-fork, also scaled up
-  const W_TRIPLE = 30000;   // triple threat scaled up
-  const W_BLOCK6 = 95000;
-  const W_BLOCK5 = 85000;
-  const W_BLOCK4 = 42500;   // was 85000 — distilled ×0.5 (less panicky)
-  const W_BLOCK3 = 300;
-  const W_OPP_FORK = 25000;  // was 50000 — distilled ×0.5
-  const W_OPP_43   = 7500;   // scaled with defense
-  const W_OPP_PRE  = 2500;   // scaled with defense
+  // ══════════════════════════════════════════════════════════════
+  // ── TUNABLE WEIGHTS (all distillable) ──
+  // Every parameter here can be overridden via window._tuneWeights.
+  // The distiller searches for optimal values.
+  // ══════════════════════════════════════════════════════════════
 
-  function getWeights() {
+  // ══════════════════════════════════════════════════════
+  // DISTILLED WEIGHTS — v4 (shape patterns + random + hill + coord descent)
+  // 80 positions, depth-4 ground truth, 46 params
+  // Result: 18.8% → 40.0% agreement (+21.3pp)
+  // ══════════════════════════════════════════════════════
+  const DEFAULTS = {
+    // ── Line-based (offense) — all roughly equal now ──
+    five: 20104,
+    four: 20165,
+    three: 20000,
+    two: 8.7,
+    openBonus: 2.8,      // big open-end multiplier
+
+    // ── Combination bonuses (offense) ──
+    fork: 34721,         // double fours
+    fourThree: 147861,   // four+three is THE combo (nearly guaranteed win)
+    preFork: 5440,       // two threes
+    tripleThreat: 13533, // three+ threes
+
+    // ── Defense (blocking) ──
+    block6: 95000,
+    block5: 85000,
+    block4: 50838,
+    block3: 3907,        // block threes much more aggressively
+    oppFork: 5313,
+    opp43: 7500,
+    oppPreFork: 2500,
+
+    // ── SPATIAL: neighbor composition ──
+    ownAdj: -392,        // HEAVY anti-cluster penalty
+    oppAdj: 409,         // pressure near opponent is great
+    emptyAdj: 56.8,
+
+    // ── SPATIAL: distances ──
+    minDistOwn: 185,     // prefer bridging distance (flipped from v3!)
+    minDistOpp: 300,     // max flanking distance bonus
+    minDistAny: 0,
+    distOwnCOM: -33.3,   // slight pull toward own center
+    distOppCOM: -24.3,   // approach opponent center
+
+    // ── SPATIAL: directional diversity ──
+    feasibleDirs: 954,   // HUGE — feasible development directions matter!
+    openDirs: 66.4,
+
+    // ── SPATIAL: spread metrics ──
+    openSpace: 44.1,
+    islandBonus: 2495,   // ISLANDS ARE GREAT (flipped from -500!)
+    bridgeBonus: 1531,   // connecting clusters still great
+    newQuadrant: -186,   // flipped — concentrating is sometimes better
+    spreadBonus: 139,
+
+    // ── SHAPE PATTERNS (distilled v4) ──
+    // Per-direction line context:
+    pat_inline: 1243,    // filling gap in own line
+    pat_lineExtend: 1651,// extending existing line (top pattern!)
+    pat_gapBridge: 1091, // bridging a gap
+    pat_adjOppLine: -500,// placing next to opp line (BAD — gets blocked)
+    pat_openReach: 426,  // open extension space
+    pat_ownThenOpp: 998, // contested extension
+    pat_skipAttack: 482, // leaping over opponent
+    pat_longReach: 72.8, // long-range connection (minor)
+
+    // Cross-direction:
+    pat_vShape: 700,     // fork foundation
+    pat_oppV: 1685,      // blocking opp fork foundation (BIG!)
+    pat_trident: -1000,  // own in all 3 dirs is BAD (too spread thin)
+    pat_clamp: 2275,     // #1 PATTERN: clamping opponent from 2 sides!
+
+    // Diagonal/knight neighbors:
+    pat_diagOwn: 47.6,   // minor
+    pat_diagOpp: 751,    // opp at diagonal = worth blocking
+    pat_knightOwn: 960,  // knight-move connections are great!
+    pat_knightOpp: -250, // opp at knight = less concerning
+
+    // Aggregate:
+    pat_ownAdj1: 8.7,    // minor
+    pat_oppAdj1: 7.8,    // minor
+    pat_isolated: 847,   // isolated moves can be strategic!
+    pat_surrounded: -2000,// tight space is TERRIBLE
+  };
+
+  function w(name) {
     const tw = window._tuneWeights;
-    if (!tw) return null;
-    return tw;
+    if (tw && tw[name] !== undefined) return tw[name];
+    return DEFAULTS[name];
   }
 
-  // ── Accumulative scoring using fast lineScan ──
+  // ── Accumulative scoring with spatial features ──
   function scoreMove(q, r, player) {
     const opponent = player === 'X' ? 'O' : 'X';
     const pc = pCode(player);
@@ -360,57 +425,292 @@
     const style = window.botPlaystyle || 'balanced';
     const [offMul, defMul] = PLAYSTYLE_MULT[style] || PLAYSTYLE_MULT.balanced;
 
-    // Allow weight overrides for distillation grid search
-    const tw = window._tuneWeights;
-    const wFour = tw ? tw.four : W_FOUR;
-    const wThree = tw ? (tw.three || W_THREE) : W_THREE;
-    const wFork = tw ? tw.fork : W_FORK;
-    const wBlock4 = tw ? tw.block4 : W_BLOCK4;
-    const wOppFork = tw ? tw.oppFork : W_OPP_FORK;
-
     let offScore = 0, defScore = 0;
     let myFives = 0, myFours = 0, myThrees = 0, myTwos = 0;
     let oppFours = 0, oppThrees = 0;
+    let feasibleDirCount = 0, openDirCount = 0;
+
+    const wFour = w('four'), wThree = w('three'), wFork = w('fork');
+    const wBlock4 = w('block4'), wOppFork = w('oppFork');
+    const openMulVal = w('openBonus');
 
     for (let di = 0; di < 3; di++) {
       const dq = DIR3_DQ[di], dr = DIR3_DR[di];
 
-      // Own lines (single scan gives length + feasibility + openness)
+      // Own lines
       const my = lineScan(q, r, dq, dr, pc);
       const myLen = my & 0xFF;
-      if (myLen >= 6) return 100000;
-      if (my & 0x100) { // feasible
+      if (myLen >= 6) return 9999999; // instant win — effectively infinite
+      if (my & 0x100) {
         const open = (my >> 9) & 0x3;
-        const openMul = open === 2 ? 1.5 : 1.0;
-        if (myLen === 5)      { myFives++; offScore += W_FIVE * openMul; }
-        else if (myLen === 4) { myFours++; offScore += wFour * openMul; }
-        else if (myLen === 3) { myThrees++; offScore += wThree * openMul; }
-        else if (myLen === 2) { myTwos++; offScore += W_TWO; }
+        const oMul = open === 2 ? openMulVal : 1.0;
+        if (myLen === 5)      { myFives++; offScore += w('five') * oMul; }
+        else if (myLen === 4) { myFours++; offScore += wFour * oMul; }
+        else if (myLen === 3) { myThrees++; offScore += wThree * oMul; }
+        else if (myLen === 2) { myTwos++; offScore += w('two'); feasibleDirCount++; }
+        if (myLen >= 2) feasibleDirCount++;
+        if (open === 2) openDirCount++;
       }
 
       // Opponent lines
       const opp = lineScan(q, r, dq, dr, opc);
       const oppLen = opp & 0xFF;
       if (opp & 0x100) {
-        if (oppLen >= 6)      defScore += W_BLOCK6;
-        else if (oppLen === 5) defScore += W_BLOCK5;
+        if (oppLen >= 6)      defScore += w('block6');
+        else if (oppLen === 5) defScore += w('block5');
         else if (oppLen === 4) { oppFours++; defScore += wBlock4; }
-        else if (oppLen === 3) { oppThrees++; defScore += W_BLOCK3; }
+        else if (oppLen === 3) { oppThrees++; defScore += w('block3'); }
       }
     }
 
     // Offense combos (stack)
     if (myFours >= 2)                       offScore += wFork;
-    if (myFours >= 1 && myThrees >= 1)      offScore += W_4_3;
-    if (myThrees >= 2)                      offScore += W_PRE_FORK;
-    if (myThrees >= 3)                      offScore += W_TRIPLE;
+    if (myFours >= 1 && myThrees >= 1)      offScore += w('fourThree');
+    if (myThrees >= 2)                      offScore += w('preFork');
+    if (myThrees >= 3)                      offScore += w('tripleThreat');
 
     // Defense combos
     if (oppFours >= 2)                      defScore += wOppFork;
-    if (oppFours >= 1 && oppThrees >= 1)    defScore += W_OPP_43;
-    if (oppThrees >= 2)                     defScore += W_OPP_PRE;
+    if (oppFours >= 1 && oppThrees >= 1)    defScore += w('opp43');
+    if (oppThrees >= 2)                     defScore += w('oppPreFork');
 
-    return offScore * offMul + defScore * defMul + Math.random() * 3;
+    let score = offScore * offMul + defScore * defMul;
+
+    // ══════════════════════════════════════════════
+    // ── SPATIAL FEATURES ──
+    // ══════════════════════════════════════════════
+
+    // Neighbor scan (radius 1)
+    let ownAdj = 0, oppAdj = 0, emptyAdj = 0;
+    for (let d = 0; d < 6; d++) {
+      const v = _fb.get(nkey(q + ALL_DQ[d], r + ALL_DR[d]));
+      if (v === pc) ownAdj++;
+      else if (v === opc) oppAdj++;
+      else emptyAdj++;
+    }
+    score += ownAdj * w('ownAdj');
+    score += oppAdj * w('oppAdj');
+    score += emptyAdj * w('emptyAdj');
+
+    // Nearest piece distances (scan radius 1-5)
+    let minDistOwn = 99, minDistOpp = 99, minDistAny = 99;
+    for (let dist = 1; dist <= 5; dist++) {
+      for (let d = 0; d < 6; d++) {
+        const v = _fb.get(nkey(q + ALL_DQ[d] * dist, r + ALL_DR[d] * dist));
+        if (v !== undefined) {
+          if (dist < minDistAny) minDistAny = dist;
+          if (v === pc && dist < minDistOwn) minDistOwn = dist;
+          if (v === opc && dist < minDistOpp) minDistOpp = dist;
+        }
+      }
+      if (minDistOwn < 99 && minDistOpp < 99) break; // found both
+    }
+    if (minDistOwn < 99) score += minDistOwn * w('minDistOwn');
+    if (minDistOpp < 99) score += minDistOpp * w('minDistOpp');
+    if (minDistAny < 99) score += minDistAny * w('minDistAny');
+
+    // Center of mass distances
+    const com = window.comCache;
+    if (com[player].n > 0) {
+      const cx = com[player].sq / com[player].n;
+      const cy = com[player].sr / com[player].n;
+      const distOwn = Math.abs(q - cx) + Math.abs(r - cy);
+      score += distOwn * w('distOwnCOM');
+    }
+    if (com[opponent].n > 0) {
+      const cx = com[opponent].sq / com[opponent].n;
+      const cy = com[opponent].sr / com[opponent].n;
+      const distOpp = Math.abs(q - cx) + Math.abs(r - cy);
+      score += distOpp * w('distOppCOM');
+    }
+
+    // Directional diversity
+    score += feasibleDirCount * w('feasibleDirs');
+    score += openDirCount * w('openDirs');
+
+    // Open space (radius 2) — count empty cells
+    let openSpace = 0;
+    for (let d = 0; d < 6; d++) {
+      const dq = ALL_DQ[d], dr = ALL_DR[d];
+      if (!_fb.has(nkey(q + dq, r + dr))) openSpace++;
+      if (!_fb.has(nkey(q + dq * 2, r + dr * 2))) openSpace++;
+    }
+    score += openSpace * w('openSpace');
+
+    // Island detection: no own piece within radius 3
+    let hasOwnNearby = false;
+    outer: for (let dist = 1; dist <= 3; dist++) {
+      for (let d = 0; d < 6; d++) {
+        if (_fb.get(nkey(q + ALL_DQ[d] * dist, r + ALL_DR[d] * dist)) === pc) {
+          hasOwnNearby = true; break outer;
+        }
+      }
+    }
+    if (!hasOwnNearby && com[player].n >= 3) score += w('islandBonus');
+
+    // Bridge detection: connects two separate own clusters
+    // Simple heuristic: count own neighbors in different hex directions
+    // If they're in opposite/non-adjacent directions, this might bridge
+    if (ownAdj >= 2) {
+      const ownDirs = [];
+      for (let d = 0; d < 6; d++) {
+        if (_fb.get(nkey(q + ALL_DQ[d], r + ALL_DR[d])) === pc) ownDirs.push(d);
+      }
+      // Check if any two own-neighbors are far apart (not adjacent directions)
+      let isBridge = false;
+      for (let i = 0; i < ownDirs.length && !isBridge; i++) {
+        for (let j = i + 1; j < ownDirs.length; j++) {
+          const gap = Math.abs(ownDirs[i] - ownDirs[j]);
+          if (gap >= 3 && gap <= 4) { isBridge = true; break; } // opposite-ish
+        }
+      }
+      if (isBridge) score += w('bridgeBonus');
+    }
+
+    // New quadrant: is this in a direction from COM that has few own pieces?
+    if (com[player].n >= 4) {
+      const cx = com[player].sq / com[player].n;
+      const cy = com[player].sr / com[player].n;
+      const dq = q - cx, dr = r - cy;
+      // Count how many own pieces are in the same "half" (dot product > 0)
+      let sameHalf = 0;
+      const pl = window.pieceList;
+      for (let i = 0; i < pl.length; i++) {
+        if (pl[i].player !== player) continue;
+        const pdq = pl[i].q - cx, pdr = pl[i].r - cy;
+        if (dq * pdq + dr * pdr > 0) sameHalf++;
+      }
+      // If less than 30% of own pieces are in this direction, it's underrepresented
+      if (sameHalf < com[player].n * 0.3) score += w('newQuadrant');
+    }
+
+    // Spread bonus: how much does this move increase the spread of our pieces?
+    if (com[player].n >= 3) {
+      const cx = com[player].sq / com[player].n;
+      const cy = com[player].sr / com[player].n;
+      const distFromCOM = Math.sqrt((q - cx) * (q - cx) + (r - cy) * (r - cy));
+      // Pieces far from COM increase spread — use distance as proxy
+      score += distFromCOM * w('spreadBonus');
+    }
+
+    // ══════════════════════════════════════════════
+    // ── SHAPE PATTERN FEATURES ──
+    // Geometric patterns in local neighborhood.
+    // All init to 0 — distillation discovers which matter.
+    // ══════════════════════════════════════════════
+
+    let ownAt1 = 0, oppAt1 = 0;
+    const dirState = []; // what's at +1 in each of 3 directions: 0=empty, 1=opp, 2=own
+
+    for (let di = 0; di < 3; di++) {
+      const ddq = DIR3_DQ[di], ddr = DIR3_DR[di];
+      const f1 = _fb.get(nkey(q + ddq, r + ddr));       // +1
+      const f2 = _fb.get(nkey(q + ddq * 2, r + ddr * 2)); // +2
+      const f3 = _fb.get(nkey(q + ddq * 3, r + ddr * 3)); // +3
+      const b1 = _fb.get(nkey(q - ddq, r - ddr));       // -1
+      const b2 = _fb.get(nkey(q - ddq * 2, r - ddr * 2)); // -2
+
+      const f1c = f1 === pc ? 2 : f1 === opc ? 1 : 0;
+      const f2c = f2 === pc ? 2 : f2 === opc ? 1 : 0;
+      const b1c = b1 === pc ? 2 : b1 === opc ? 1 : 0;
+      const b2c = b2 === pc ? 2 : b2 === opc ? 1 : 0;
+
+      dirState[di] = f1c;
+      if (f1c === 2) ownAt1++;
+      if (f1c === 1) oppAt1++;
+
+      // Inline: own at both -1 and +1 (fills gap in own line)
+      if (b1c === 2 && f1c === 2) score += w('pat_inline');
+
+      // Line extend: own at +1 and +2 (extending existing line)
+      if (f1c === 2 && f2c === 2) score += w('pat_lineExtend');
+      if (b1c === 2 && b2c === 2) score += w('pat_lineExtend');
+
+      // Gap bridge: empty at +1, own at +2 (creates potential with a gap)
+      if (f1c === 0 && f2c === 2) score += w('pat_gapBridge');
+      if (b1c === 0 && b2c === 2) score += w('pat_gapBridge');
+
+      // Adjacent to opponent line: opp at +1 and +2
+      if (f1c === 1 && f2c === 1) score += w('pat_adjOppLine');
+      if (b1c === 1 && b2c === 1) score += w('pat_adjOppLine');
+
+      // Open reach: both +1 and +2 empty
+      if (f1c === 0 && f2c === 0) score += w('pat_openReach');
+
+      // Contested extension: own then opp
+      if (f1c === 2 && f2c === 1) score += w('pat_ownThenOpp');
+      if (b1c === 2 && b2c === 1) score += w('pat_ownThenOpp');
+
+      // Skip attack: opp then own (leaping over opponent)
+      if (f1c === 1 && f2c === 2) score += w('pat_skipAttack');
+      if (b1c === 1 && b2c === 2) score += w('pat_skipAttack');
+
+      // Long reach: own at +3, empty at +1 and +2
+      const f3c = f3 === pc ? 2 : 0;
+      if (f1c === 0 && f2c === 0 && f3c === 2) score += w('pat_longReach');
+    }
+
+    // Cross-direction patterns
+    let vShapeCount = 0, oppVCount = 0;
+    for (let a = 0; a < 3; a++) {
+      for (let b = a + 1; b < 3; b++) {
+        if (dirState[a] === 2 && dirState[b] === 2) vShapeCount++;
+        if (dirState[a] === 1 && dirState[b] === 1) oppVCount++;
+      }
+    }
+    score += vShapeCount * w('pat_vShape');
+    score += oppVCount * w('pat_oppV');
+
+    // Trident: own at +1 in all 3 directions
+    if (ownAt1 === 3) score += w('pat_trident');
+
+    // Clamp: own in 2 dirs, opp in 3rd
+    if (ownAt1 === 2 && oppAt1 === 1) score += w('pat_clamp');
+
+    // Diagonal neighbors: cells at (dir_a + dir_b) — the "between" hex cells
+    let diagOwn = 0, diagOpp = 0;
+    for (let a = 0; a < 3; a++) {
+      for (let b = a + 1; b < 3; b++) {
+        const cq = DIR3_DQ[a] + DIR3_DQ[b], cr = DIR3_DR[a] + DIR3_DR[b];
+        const v1 = _fb.get(nkey(q + cq, r + cr));
+        if (v1 === pc) diagOwn++;
+        else if (v1 === opc) diagOpp++;
+        // Also check the negative combined direction
+        const v2 = _fb.get(nkey(q - cq, r - cr));
+        if (v2 === pc) diagOwn++;
+        else if (v2 === opc) diagOpp++;
+      }
+    }
+    score += diagOwn * w('pat_diagOwn');
+    score += diagOpp * w('pat_diagOpp');
+
+    // Knight moves: 2 steps in one dir, 1 step in another (hex "L" shape)
+    let knightOwn = 0, knightOpp = 0;
+    for (let a = 0; a < 3; a++) {
+      for (let b = 0; b < 3; b++) {
+        if (a === b) continue;
+        const kq = DIR3_DQ[a] * 2 + DIR3_DQ[b];
+        const kr = DIR3_DR[a] * 2 + DIR3_DR[b];
+        const v = _fb.get(nkey(q + kq, r + kr));
+        if (v === pc) knightOwn++;
+        else if (v === opc) knightOpp++;
+      }
+    }
+    score += knightOwn * w('pat_knightOwn');
+    score += knightOpp * w('pat_knightOpp');
+
+    // Aggregate counts
+    score += ownAt1 * w('pat_ownAdj1');
+    score += oppAt1 * w('pat_oppAdj1');
+
+    // Isolated: no pieces at +1 in any direction
+    if (ownAt1 === 0 && oppAt1 === 0) score += w('pat_isolated');
+
+    // Surrounded: 4+ neighbors occupied (tight space, limited growth)
+    if (ownAdj + oppAdj >= 4) score += w('pat_surrounded');
+
+    score += Math.random() * 3;
+    return score;
   }
 
   // Check instant win (uses fast board)
@@ -578,10 +878,10 @@
     let bestScore = -Infinity, bestPair = [topN[0], topN[1] || topN[0]];
     const pc = pCode(player);
     for (let i1 = 0; i1 < topN.length; i1++) {
-      if (bestScore >= 200000) break;
+      if (bestScore >= WIN) break;
       const m1 = topN[i1];
       simPlace(m1.q, m1.r, player, () => {
-        if (isWinMove(m1.q, m1.r, pc)) { bestScore = 200000; bestPair = [m1]; return; }
+        if (isWinMove(m1.q, m1.r, pc)) { bestScore = WIN; bestPair = [m1]; return; }
         const cands2 = mergeCandidates(getCandidatesNear([m1]), topN);
         const scored2 = [];
         for (const c of cands2) {
@@ -592,7 +892,7 @@
         const top2 = scored2.length > 10 ? scored2.slice(0, 10) : scored2;
         for (const m2 of top2) {
           const ps = simPlace(m2.q, m2.r, player, () => {
-            if (isWinMove(m2.q, m2.r, pc)) return 200000;
+            if (isWinMove(m2.q, m2.r, pc)) return WIN;
             return m1.s + m2.s + evalBoard(player) * 0.3;
           });
           if (ps > bestScore) { bestScore = ps; bestPair = [m1, m2]; }
@@ -606,7 +906,7 @@
 
   let _nodesSearched = 0;
   let _pruned = 0;
-  const WIN = 200000, LOSS = -200000;
+  const WIN = 9999999, LOSS = -9999999;
 
   // Quick heuristic for very deep plies (ply 6+)
   function quickScore(q, r, pc) {
