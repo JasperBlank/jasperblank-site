@@ -148,12 +148,17 @@
   }
 
   // ── Must-block detection (root only — not called during deep search) ──
+  // Returns { critical: [...], urgent: [...] }
+  // critical = opponent has 4+ in-a-row (MUST block NOW or lose)
+  // urgent = opponent has 3-in-a-row with both ends open (can reach 5 in one turn)
   function findMustBlocks(opponent) {
     const pc = pCode(opponent);
     const pieceList = window.pieceList;
     const checked = new Set();
-    const blockCells = [];
-    const seen = new Set();
+    const critical = []; // 4+ in-a-row blocks
+    const urgent = [];   // 3-in-a-row with both ends open (can become 5 in one turn)
+    const seenCrit = new Set();
+    const seenUrg = new Set();
 
     function scan(pq, pr) {
       for (let di = 0; di < 3; di++) {
@@ -165,17 +170,40 @@
         checked.add(rk);
         let len = 0, cq = sq, cr = sr;
         while (_fb.get(nkey(cq, cr)) === pc) { len++; cq += dq; cr += dr; }
-        if (len < 4) continue;
+        if (len < 3) continue;
         if (!window.hasSpaceForSix(sq, sr, dq, dr, len, opponent)) continue;
+
         const beforeQ = sq - dq, beforeR = sr - dr;
         const afterQ = cq, afterR = cr;
-        if (!_fb.has(nkey(beforeQ, beforeR))) {
-          const k = nkey(beforeQ, beforeR);
-          if (!seen.has(k)) { seen.add(k); blockCells.push({ q: beforeQ, r: beforeR }); }
-        }
-        if (!_fb.has(nkey(afterQ, afterR))) {
-          const k = nkey(afterQ, afterR);
-          if (!seen.has(k)) { seen.add(k); blockCells.push({ q: afterQ, r: afterR }); }
+        const beforeOpen = !_fb.has(nkey(beforeQ, beforeR));
+        const afterOpen = !_fb.has(nkey(afterQ, afterR));
+
+        if (len >= 4) {
+          // CRITICAL: must block immediately
+          if (beforeOpen) {
+            const k = nkey(beforeQ, beforeR);
+            if (!seenCrit.has(k)) { seenCrit.add(k); critical.push({ q: beforeQ, r: beforeR, severity: len }); }
+          }
+          if (afterOpen) {
+            const k = nkey(afterQ, afterR);
+            if (!seenCrit.has(k)) { seenCrit.add(k); critical.push({ q: afterQ, r: afterR, severity: len }); }
+          }
+        } else if (len === 3 && beforeOpen && afterOpen) {
+          // URGENT: opponent can extend to 5 with 2 moves (both ends open)
+          // Also check if there's room beyond the ends for further extension
+          const beforeOpen2 = !_fb.has(nkey(beforeQ - dq, beforeR - dr));
+          const afterOpen2 = !_fb.has(nkey(afterQ + dq, afterR + dr));
+          // If at least one side has 2+ open cells, opponent can reach 5 in one turn
+          if (beforeOpen2 || afterOpen2) {
+            if (!seenUrg.has(nkey(beforeQ, beforeR))) {
+              seenUrg.add(nkey(beforeQ, beforeR));
+              urgent.push({ q: beforeQ, r: beforeR, severity: 3 });
+            }
+            if (!seenUrg.has(nkey(afterQ, afterR))) {
+              seenUrg.add(nkey(afterQ, afterR));
+              urgent.push({ q: afterQ, r: afterR, severity: 3 });
+            }
+          }
         }
       }
     }
@@ -183,14 +211,13 @@
     for (let pi = 0; pi < pieceList.length; pi++) {
       if (pieceList[pi].player === opponent) scan(pieceList[pi].q, pieceList[pi].r);
     }
-    // Also scan sim-placed pieces
     for (const [nk, v] of _fb) {
       if (v !== pc) continue;
       const r = Math.floor(nk / 20001) - 10000;
       const q = (nk % 20001) - 10000;
       scan(q, r);
     }
-    return blockCells;
+    return { critical, urgent };
   }
 
   // Get candidates using pieceList + numeric dedup
@@ -812,22 +839,65 @@
   }
 
   // ── Must-block safety (root only) ──
+  // Uses BOTH moves for blocking if there are multiple critical threats.
   function applyMustBlock(moves, player, hasTwo) {
     const opponent = player === 'X' ? 'O' : 'X';
-    const blocks = findMustBlocks(opponent);
-    if (blocks.length === 0) return moves;
+    const { critical, urgent } = findMustBlocks(opponent);
+
+    // Combine: critical blocks take absolute priority, then urgent
+    const allBlocks = [...critical, ...urgent];
+    if (allBlocks.length === 0) return moves;
 
     const moveKeys = new Set(moves.map(m => nkey(m.q, m.r)));
-    for (const b of blocks) {
-      if (moveKeys.has(nkey(b.q, b.r))) return moves; // already blocking
+
+    // Count how many critical threats are NOT already addressed by our moves
+    const unblockedCritical = critical.filter(b => !moveKeys.has(nkey(b.q, b.r)));
+    const unblockedUrgent = urgent.filter(b => !moveKeys.has(nkey(b.q, b.r)));
+
+    // If all critical threats are already blocked by our moves, check urgent
+    if (unblockedCritical.length === 0 && unblockedUrgent.length === 0) return moves;
+
+    // If we only have 1 move, use it for the most severe block
+    if (!hasTwo || moves.length < 2) {
+      const bestBlock = unblockedCritical[0] || unblockedUrgent[0];
+      if (!bestBlock) return moves;
+      return [bestBlock];
     }
 
-    const blockCell = blocks[0];
-    if (!hasTwo || moves.length < 2) return [blockCell];
+    // We have 2 moves. Prioritize blocking.
+    if (unblockedCritical.length >= 2) {
+      // TWO+ critical threats unblocked: use BOTH moves to block!
+      // Sort by severity (5-in-a-row > 4-in-a-row)
+      unblockedCritical.sort((a, b) => b.severity - a.severity);
+      return [unblockedCritical[0], unblockedCritical[1]];
+    }
 
-    const s0 = scoreMove(moves[0].q, moves[0].r, player);
-    const s1 = scoreMove(moves[1].q, moves[1].r, player);
-    return s0 >= s1 ? [moves[0], blockCell] : [blockCell, moves[1]];
+    if (unblockedCritical.length === 1) {
+      // One critical threat: block it + keep our best other move
+      const blockCell = unblockedCritical[0];
+      const s0 = scoreMove(moves[0].q, moves[0].r, player);
+      const s1 = scoreMove(moves[1].q, moves[1].r, player);
+      // Check if there's also an urgent threat to block with the second move
+      if (unblockedUrgent.length > 0) {
+        return [blockCell, unblockedUrgent[0]];
+      }
+      return s0 >= s1 ? [moves[0], blockCell] : [blockCell, moves[1]];
+    }
+
+    // No critical but urgent threats exist
+    if (unblockedUrgent.length >= 2) {
+      // Multiple urgent threats: block the 2 most important
+      return [unblockedUrgent[0], unblockedUrgent[1]];
+    }
+
+    if (unblockedUrgent.length === 1) {
+      const blockCell = unblockedUrgent[0];
+      const s0 = scoreMove(moves[0].q, moves[0].r, player);
+      const s1 = scoreMove(moves[1].q, moves[1].r, player);
+      return s0 >= s1 ? [moves[0], blockCell] : [blockCell, moves[1]];
+    }
+
+    return moves;
   }
 
   // ── Difficulty: Easy (greedy) ──
@@ -1046,7 +1116,19 @@
     _placedLen = 0;
     window.botSearchDepth = maxDepth;
 
+    // Inject block cells into candidates so the search considers them
     const candidates = getCandidates();
+    const { critical: critBlocks, urgent: urgBlocks } = findMustBlocks(opponent);
+    const candSeen = new Set(candidates.map(c => nkey(c.q, c.r)));
+    for (const b of critBlocks) {
+      const bk = nkey(b.q, b.r);
+      if (!candSeen.has(bk) && !_fb.has(bk)) { candSeen.add(bk); candidates.push(b); }
+    }
+    for (const b of urgBlocks) {
+      const bk = nkey(b.q, b.r);
+      if (!candSeen.has(bk) && !_fb.has(bk)) { candSeen.add(bk); candidates.push(b); }
+    }
+
     const scored = [];
     for (const c of candidates) scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, player) });
     scored.sort((a, b) => b.s - a.s);
