@@ -406,88 +406,87 @@
   // ══════════════════════════════════════════════════════════════
 
   // ══════════════════════════════════════════════════════
-  // DISTILLED WEIGHTS — v4 (shape patterns + random + hill + coord descent)
-  // 80 positions, depth-4 ground truth, 46 params
-  // Result: 18.8% → 40.0% agreement (+21.3pp)
+  // DISTILLED WEIGHTS — v5 (threat cost + TT/killers/history/LMR)
+  // 50 positions, depth-4 ground truth, 51 params
+  // Result: 40.0% → 52.0% agreement (+12.0pp)
   // ══════════════════════════════════════════════════════
   const DEFAULTS = {
-    // ── Line-based (offense) — all roughly equal now ──
-    five: 20104,
-    four: 20165,
-    three: 20000,
-    two: 8.7,
-    openBonus: 2.8,      // big open-end multiplier
+    // ── Line-based (offense) ──
+    five: 13821,
+    four: 5033,
+    three: 851,
+    two: 99.2,
+    openBonus: 2.8,
 
     // ── Combination bonuses (offense) ──
-    fork: 34721,         // double fours
-    fourThree: 147861,   // four+three is THE combo (nearly guaranteed win)
-    preFork: 5440,       // two threes
-    tripleThreat: 13533, // three+ threes
+    fork: 372914,        // forks are KING — nearly 400K!
+    fourThree: 71263,
+    preFork: 100000,     // pre-fork setups hugely valuable (hit ceiling)
+    tripleThreat: 2000,
 
     // ── Defense (blocking) ──
-    block6: 95000,
-    block5: 85000,
-    block4: 50838,
-    block3: 3907,        // block threes much more aggressively
-    oppFork: 5313,
-    opp43: 7500,
-    oppPreFork: 2500,
+    block6: 50000,
+    block5: 83697,
+    block4: 59736,
+    block3: 74.6,
+    oppFork: 5579,
+    opp43: 3443,
+    oppPreFork: 711,
 
     // ── SPATIAL: neighbor composition ──
-    ownAdj: -392,        // HEAVY anti-cluster penalty
-    oppAdj: 409,         // pressure near opponent is great
-    emptyAdj: 56.8,
+    ownAdj: 68.6,        // slight clustering bonus now
+    oppAdj: 276,         // pressure near opponent
+    emptyAdj: -86.3,     // empty neighbors less useful (prefer action)
 
     // ── SPATIAL: distances ──
-    minDistOwn: 185,     // prefer bridging distance (flipped from v3!)
-    minDistOpp: 300,     // max flanking distance bonus
-    minDistAny: 0,
-    distOwnCOM: -33.3,   // slight pull toward own center
-    distOppCOM: -24.3,   // approach opponent center
+    minDistOwn: -256,     // prefer close to own pieces
+    minDistOpp: -51,
+    minDistAny: -200,
+    distOwnCOM: -8.1,
+    distOppCOM: 14.1,
 
     // ── SPATIAL: directional diversity ──
-    feasibleDirs: 954,   // HUGE — feasible development directions matter!
-    openDirs: 66.4,
+    feasibleDirs: 1175,  // still huge
+    openDirs: 324,
 
     // ── SPATIAL: spread metrics ──
-    openSpace: 44.1,
-    islandBonus: 2495,   // ISLANDS ARE GREAT (flipped from -500!)
-    bridgeBonus: 1531,   // connecting clusters still great
-    newQuadrant: -186,   // flipped — concentrating is sometimes better
-    spreadBonus: 139,
+    openSpace: 23.6,
+    islandBonus: 4513,   // islands even more valuable!
+    bridgeBonus: 5000,   // bridge bonus hit ceiling
+    newQuadrant: 496,
+    spreadBonus: -4.6,
 
-    // ── SHAPE PATTERNS (distilled v4) ──
-    // Per-direction line context:
-    pat_inline: 1243,    // filling gap in own line
-    pat_lineExtend: 1651,// extending existing line (top pattern!)
-    pat_gapBridge: 1091, // bridging a gap
-    pat_adjOppLine: -500,// placing next to opp line (BAD — gets blocked)
-    pat_openReach: 426,  // open extension space
-    pat_ownThenOpp: 998, // contested extension
-    pat_skipAttack: 482, // leaping over opponent
-    pat_longReach: 72.8, // long-range connection (minor)
+    // ── SHAPE PATTERNS (distilled v5) ──
+    pat_inline: 500,
+    pat_lineExtend: 97.2,
+    pat_gapBridge: -369,
+    pat_adjOppLine: -202,
+    pat_openReach: 451,
+    pat_ownThenOpp: 1658, // contested extension is big
+    pat_skipAttack: -500,
+    pat_longReach: 689,
 
     // Cross-direction:
-    pat_vShape: 700,     // fork foundation
-    pat_oppV: 1685,      // blocking opp fork foundation (BIG!)
-    pat_trident: -1000,  // own in all 3 dirs is BAD (too spread thin)
-    pat_clamp: 2275,     // #1 PATTERN: clamping opponent from 2 sides!
+    pat_vShape: -33.5,
+    pat_oppV: -486,
+    pat_trident: -1356,   // spread too thin = bad
+    pat_clamp: 1686,      // clamping still great
 
     // Diagonal/knight neighbors:
-    pat_diagOwn: 47.6,   // minor
-    pat_diagOpp: 751,    // opp at diagonal = worth blocking
-    pat_knightOwn: 960,  // knight-move connections are great!
-    pat_knightOpp: -250, // opp at knight = less concerning
+    pat_diagOwn: -500,
+    pat_diagOpp: 16.3,
+    pat_knightOwn: 8.1,
+    pat_knightOpp: 1000,  // blocking opp at knight distance matters!
 
     // Aggregate:
-    pat_ownAdj1: 8.7,    // minor
-    pat_oppAdj1: 7.8,    // minor
-    pat_isolated: 847,   // isolated moves can be strategic!
-    pat_surrounded: -2000,// tight space is TERRIBLE
+    pat_ownAdj1: 8.7,
+    pat_oppAdj1: 7.8,
+    pat_isolated: -810,   // isolated moves now penalized (more data)
+    pat_surrounded: -2095, // tight space still terrible
 
     // ── THREAT COST (forcing analysis) ──
-    threatCostGain: 30000,  // bonus per +1 own threat cost increase
-    threatCostBlock: 20000, // bonus per -1 opponent threat cost reduction
+    threatCostGain: 17403,   // creating threats
+    threatCostBlock: 80000,  // BLOCKING threats is #1 priority (hit ceiling!)
   };
 
   function w(name) {
