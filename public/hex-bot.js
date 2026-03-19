@@ -484,6 +484,10 @@
     pat_oppAdj1: 7.8,    // minor
     pat_isolated: 847,   // isolated moves can be strategic!
     pat_surrounded: -2000,// tight space is TERRIBLE
+
+    // ── THREAT COST (forcing analysis) ──
+    threatCostGain: 30000,  // bonus per +1 own threat cost increase
+    threatCostBlock: 20000, // bonus per -1 opponent threat cost reduction
   };
 
   function w(name) {
@@ -493,7 +497,8 @@
   }
 
   // ── Accumulative scoring with spatial features ──
-  function scoreMove(q, r, player) {
+  // skipThreatCost: if true, skip expensive threat cost delta (used in deep search)
+  function scoreMove(q, r, player, skipThreatCost) {
     const opponent = player === 'X' ? 'O' : 'X';
     const pc = pCode(player);
     const opc = pCode(opponent);
@@ -783,6 +788,50 @@
 
     // Surrounded: 4+ neighbors occupied (tight space, limited growth)
     if (ownAdj + oppAdj >= 4) score += w('pat_surrounded');
+
+    // ══════════════════════════════════════════════
+    // ── THREAT COST DELTA ──
+    // How much does this move change the forcing balance?
+    // A move that increases our threat cost or decreases opponent's is golden.
+    // Only computed at shallow plies (expensive — scans all pieces).
+    // ══════════════════════════════════════════════
+    if (!skipThreatCost) {
+      const tcBefore = computeThreatCost(player);
+      const tcOppBefore = computeThreatCost(opponent);
+
+      // Temporarily place and measure
+      const tcK = q + ',' + r;
+      const tcNk = nkey(q, r);
+      window.board[tcK] = player;
+      _fb.set(tcNk, pc);
+
+      const tcAfter = computeThreatCost(player);
+      const tcOppAfter = computeThreatCost(opponent);
+
+      delete window.board[tcK];
+      _fb.delete(tcNk);
+
+      const myDelta = tcAfter.cost - tcBefore.cost;
+      const oppDelta = tcOppBefore.cost - tcOppAfter.cost;
+
+      // Crossing the threshold of 2 is CRITICAL
+      if (tcAfter.cost > 2 && tcBefore.cost <= 2) {
+        score += 800000; // this move makes our threats unstoppable!
+      } else if (tcAfter.cost === 2 && tcBefore.cost < 2) {
+        score += 100000; // one more threat and we win
+      }
+
+      // Reducing opponent from >2 to <=2 is life-saving
+      if (tcOppBefore.cost > 2 && tcOppAfter.cost <= 2) {
+        score += 600000; // saved ourselves from forced loss
+      } else if (tcOppBefore.cost === 2 && tcOppAfter.cost < 2) {
+        score += 50000;
+      }
+
+      // General delta bonuses
+      score += myDelta * w('threatCostGain');
+      score += oppDelta * w('threatCostBlock');
+    }
 
     score += Math.random() * 3;
     return score;
@@ -1378,7 +1427,7 @@
       if (useQuick) {
         scored.push({ q: c.q, r: c.r, s: quickScore(c.q, c.r, pc) + priority });
       } else {
-        scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, tp) + priority });
+        scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, tp, currentPly >= 3) + priority });
       }
     }
     scored.sort((a, b) => b.s - a.s);
