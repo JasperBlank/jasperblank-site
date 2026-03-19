@@ -1417,19 +1417,17 @@
       const c = raw[i];
       const cnk = nkey(c.q, c.r);
       if (_fb.has(cnk)) continue;
-      // Move ordering priority: TT best move > killers > history > eval score
+      // Move ordering: TT best move > killers > history, then eval score
+      // Priority is ONLY for sort ordering, NOT mixed into eval
       let priority = 0;
-      if (cnk === ttBestNk) priority = 1000000;         // TT best move first
-      else if (cnk === k1) priority = 500000;            // killer 1
-      else if (cnk === k2) priority = 400000;            // killer 2
-      else priority = (_history.get(cnk) || 0);          // history score
-      if (useQuick) {
-        scored.push({ q: c.q, r: c.r, s: quickScore(c.q, c.r, pc) + priority });
-      } else {
-        scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, tp, currentPly >= 3) + priority });
-      }
+      if (cnk === ttBestNk) priority = 1000000;
+      else if (cnk === k1) priority = 500000;
+      else if (cnk === k2) priority = 400000;
+      else priority = (_history.get(cnk) || 0);
+      const evalScore = useQuick ? quickScore(c.q, c.r, pc) : scoreMove(c.q, c.r, tp, currentPly >= 3);
+      scored.push({ q: c.q, r: c.r, s: evalScore, order: evalScore + priority });
     }
-    scored.sort((a, b) => b.s - a.s);
+    scored.sort((a, b) => b.order - a.order);
     const len = Math.min(scored.length, width);
     if (len === 0) return evalBoard(rootPlayer);
 
