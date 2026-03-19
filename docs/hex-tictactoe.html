@@ -136,6 +136,32 @@
   #playstyle-buttons button.selected.balanced { border-color: #ffa726; color: #ffa726; background: #2a2a1e; }
   #playstyle-buttons button.selected.defensive { border-color: #42a5f5; color: #42a5f5; background: #1e1e2a; }
   .bot-only { display: none; }
+  /* Checkmate analysis banner */
+  #analysis-banner {
+    display: none;
+    text-align: center;
+    padding: 6px 16px;
+    font-size: 0.95rem;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    z-index: 10;
+    animation: pulse-bg 1.5s ease-in-out infinite;
+  }
+  #analysis-banner.show { display: block; }
+  #analysis-banner.mate-x {
+    background: linear-gradient(90deg, rgba(79,195,247,0.15), rgba(79,195,247,0.3), rgba(79,195,247,0.15));
+    color: #4fc3f7;
+    border-bottom: 2px solid #4fc3f7;
+  }
+  #analysis-banner.mate-o {
+    background: linear-gradient(90deg, rgba(239,83,80,0.15), rgba(239,83,80,0.3), rgba(239,83,80,0.15));
+    color: #ef5350;
+    border-bottom: 2px solid #ef5350;
+  }
+  @keyframes pulse-bg {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -144,6 +170,7 @@
   <div id="status"></div>
   <button id="btn-reset" onclick="resetGame()">New Game</button>
 </div>
+<div id="analysis-banner"></div>
 <canvas id="canvas"></canvas>
 <div id="win-overlay">
   <div id="win-box">
@@ -211,6 +238,51 @@ const statusEl = document.getElementById('status');
 const winOverlay = document.getElementById('win-overlay');
 const winMsg = document.getElementById('win-msg');
 const pickOverlay = document.getElementById('pick-overlay');
+const analysisBanner = document.getElementById('analysis-banner');
+
+// ── Checkmate analysis display ──
+let lastAnalysis = null;
+
+function updateAnalysis() {
+  if (!window.analyzePosition) {
+    analysisBanner.classList.remove('show');
+    return;
+  }
+  if (window.gameOver || !window.gameStarted) {
+    analysisBanner.classList.remove('show');
+    lastAnalysis = null;
+    return;
+  }
+  try {
+    lastAnalysis = window.analyzePosition();
+  } catch(e) {
+    lastAnalysis = null;
+  }
+
+  if (!lastAnalysis) {
+    analysisBanner.classList.remove('show');
+    return;
+  }
+
+  const a = lastAnalysis;
+  const pName = a.player;
+  const col = pName === 'X' ? '#4fc3f7' : '#ef5350';
+  analysisBanner.className = 'show mate-' + pName.toLowerCase();
+  analysisBanner.id = 'analysis-banner';
+
+  if (a.mateIn === 1) {
+    analysisBanner.innerHTML = `⚡ CHECKMATE IN 1 — <span style="color:${col}">${pName}</span> can win this turn!`;
+  } else if (a.mateIn === 2 && a.type === 'unstoppable') {
+    const n = a.threats ? a.threats.length : '3+';
+    analysisBanner.innerHTML = `🔥 CHECKMATE IN 2 — <span style="color:${col}">${pName}</span> has ${n} unstoppable threats!`;
+  } else if (a.mateIn === 2) {
+    analysisBanner.innerHTML = `⚠️ CHECKMATE IN 2 — <span style="color:${col}">${pName}</span> can force a win next turn!`;
+  } else if (a.mateIn === 3) {
+    analysisBanner.innerHTML = `📐 FORCED WIN ~3 — <span style="color:${col}">${pName}</span> has a dominant fork position!`;
+  } else {
+    analysisBanner.classList.remove('show');
+  }
+}
 
 // Check if bot is available
 const botAvailable = !!window.HEX_BOT_LOADED;
@@ -324,6 +396,8 @@ function startGame(side) {
   window.botThinking = false;
   camX = 0; camY = 0; zoom = 1;
   window.gameStarted = true;
+  lastAnalysis = null;
+  analysisBanner.classList.remove('show');
   pickOverlay.classList.remove('show');
   winOverlay.classList.remove('show');
   updateStatus();
@@ -502,6 +576,8 @@ window.applyMove = function(q, r) {
 
   updateStatus();
   draw();
+  // Run checkmate analysis after each move (slight delay to not block rendering)
+  setTimeout(updateAnalysis, 10);
 
   if (!window.gameOver && !window.botThinking && window.isBotTurn()) {
     window.scheduleBotMove();
@@ -516,7 +592,7 @@ if (!window.scheduleBotMove) {
 // ── Rendering ──
 function resizeCanvas() {
   canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - document.getElementById('header').offsetHeight;
+  canvas.height = window.innerHeight - document.getElementById('header').offsetHeight - analysisBanner.offsetHeight;
   draw();
 }
 
@@ -606,6 +682,74 @@ function draw() {
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText('!', x, y); ctx.restore();
         }
+      }
+    }
+  }
+
+  // ── Checkmate markers: highlight forced-win cells ──
+  if (lastAnalysis && !window.gameOver) {
+    const a = lastAnalysis;
+    const mateColor = a.player === 'X' ? '#4fc3f7' : '#ef5350';
+    const goldColor = '#ffd740';
+
+    // Draw markers on win/threat cells
+    const markerCells = a.threats || (a.moves || []);
+    if (markerCells.length > 0) {
+      for (const cell of markerCells) {
+        const { x, y } = hexToPixel(cell.q, cell.r);
+        // Pulsing glow ring
+        ctx.save();
+        ctx.globalAlpha = 0.4 + 0.2 * Math.sin(Date.now() / 300);
+        ctx.strokeStyle = goldColor;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = Math.PI / 180 * (60 * i);
+          const hx = x + (HEX_SIZE - 1) * Math.cos(angle);
+          const hy = y + (HEX_SIZE - 1) * Math.sin(angle);
+          if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        // Star/checkmate symbol
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = goldColor;
+        ctx.font = `bold ${HEX_SIZE * 0.5}px 'Segoe UI', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const symbol = a.mateIn === 1 ? '★' : a.mateIn === 2 ? '⚡' : '◆';
+        ctx.fillText(symbol, x, y);
+        ctx.restore();
+      }
+    }
+
+    // If there are specific setup moves (the moves that create the checkmate), highlight them
+    if (a.moves && a.type === 'setup') {
+      for (const m of a.moves) {
+        const { x, y } = hexToPixel(m.q, m.r);
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        drawHex(x, y, HEX_SIZE - 1, goldColor, null, 0);
+        ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = goldColor;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = Math.PI / 180 * (60 * i);
+          const hx = x + (HEX_SIZE - 1) * Math.cos(angle);
+          const hy = y + (HEX_SIZE - 1) * Math.sin(angle);
+          if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
       }
     }
   }
@@ -703,6 +847,11 @@ canvas.addEventListener('touchend', e => {
 window.addEventListener('resize', resizeCanvas);
 canvas.classList.add('placing');
 resizeCanvas();
+
+// Animate checkmate markers (pulsing glow)
+setInterval(() => {
+  if (lastAnalysis && !window.gameOver) draw();
+}, 200);
 </script>
 </body>
 </html>

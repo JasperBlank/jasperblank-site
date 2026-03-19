@@ -1151,6 +1151,173 @@
     return botPickMovesHard(player);
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // ── FORCED WIN / CHECKMATE ANALYSIS ──
+  // Detects mate-in-1, mate-in-2, and unstoppable threat positions.
+  // Called after each move to display position evaluation.
+  // ══════════════════════════════════════════════════════════════
+
+  // Count cells where placing a piece would complete 6-in-a-row
+  function countWinCells(player) {
+    const pc = pCode(player);
+    const checked = new Set();
+    const winCells = [];
+    const seen = new Set();
+
+    for (const [nk, v] of _fb) {
+      if (v !== pc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+
+      for (let di = 0; di < 3; di++) {
+        const dq = DIR3_DQ[di], dr = DIR3_DR[di];
+        let sq = pq, sr = pr;
+        while (_fb.get(nkey(sq - dq, sr - dr)) === pc) { sq -= dq; sr -= dr; }
+        const rk = nkey(sq, sr) * 4 + di;
+        if (checked.has(rk)) continue;
+        checked.add(rk);
+        let len = 0, cq = sq, cr = sr;
+        while (_fb.get(nkey(cq, cr)) === pc) { len++; cq += dq; cr += dr; }
+        if (len < 5) continue;
+        // Each open end is a win-in-one cell
+        const bk = nkey(sq - dq, sr - dr);
+        if (!_fb.has(bk) && !seen.has(bk)) { seen.add(bk); winCells.push({ q: sq - dq, r: sr - dr }); }
+        const ak = nkey(cq, cr);
+        if (!_fb.has(ak) && !seen.has(ak)) { seen.add(ak); winCells.push({ q: cq, r: cr }); }
+      }
+    }
+    return winCells;
+  }
+
+  // Count lines of 4 with open completion cells (each completion → potential 5)
+  function countFourThreats(player) {
+    const pc = pCode(player);
+    const checked = new Set();
+    const threatCells = [];
+    const seen = new Set();
+
+    for (const [nk, v] of _fb) {
+      if (v !== pc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+
+      for (let di = 0; di < 3; di++) {
+        const dq = DIR3_DQ[di], dr = DIR3_DR[di];
+        let sq = pq, sr = pr;
+        while (_fb.get(nkey(sq - dq, sr - dr)) === pc) { sq -= dq; sr -= dr; }
+        const rk = nkey(sq, sr) * 4 + di;
+        if (checked.has(rk)) continue;
+        checked.add(rk);
+        let len = 0, cq = sq, cr = sr;
+        while (_fb.get(nkey(cq, cr)) === pc) { len++; cq += dq; cr += dr; }
+        if (len !== 4) continue;
+        if (!window.hasSpaceForSix(sq, sr, dq, dr, len, player)) continue;
+        const bk = nkey(sq - dq, sr - dr);
+        if (!_fb.has(bk) && !seen.has(bk)) { seen.add(bk); threatCells.push({ q: sq - dq, r: sr - dr, dir: di }); }
+        const ak = nkey(cq, cr);
+        if (!_fb.has(ak) && !seen.has(ak)) { seen.add(ak); threatCells.push({ q: cq, r: cr, dir: di }); }
+      }
+    }
+    return threatCells;
+  }
+
+  window.analyzePosition = function() {
+    if (window.gameOver) return null;
+    syncFastBoard();
+
+    const cp = window.currentPlayer;
+    const opp = cp === 'X' ? 'O' : 'X';
+    const hasTwo = window.movesLeft >= 2;
+
+    // ── Mate-in-1: current player can win this turn ──
+    const winMoves = findWinningMoves(cp, hasTwo);
+    if (winMoves) return { player: cp, mateIn: 1, moves: winMoves, type: 'win' };
+
+    // ── Check existing threats (no hypothetical moves) ──
+    const cpWinCells = countWinCells(cp);
+    const oppWinCells = countWinCells(opp);
+
+    // If opponent already has 3+ win cells, current player can't block all
+    // (they have at most 2 moves). Opponent wins next turn.
+    if (oppWinCells.length >= 3) {
+      return { player: opp, mateIn: 2, threats: oppWinCells, type: 'unstoppable' };
+    }
+
+    // If current player has 3+ win cells AND it's about to be opponent's turn
+    // after current player finishes, opponent can't block all → mate-in-2
+    if (cpWinCells.length >= 3) {
+      return { player: cp, mateIn: 2, threats: cpWinCells, type: 'unstoppable' };
+    }
+
+    // ── Mate-in-2: after current player's moves, create unstoppable threats ──
+    // Try top candidate moves and check if resulting position has 3+ win threats
+    const candidates = getCandidates();
+    const scored = [];
+    for (const c of candidates) {
+      if (_fb.has(nkey(c.q, c.r))) continue;
+      scored.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, cp) });
+    }
+    scored.sort((a, b) => b.s - a.s);
+    const topN = scored.slice(0, 12);
+
+    if (hasTwo) {
+      // Try pairs of moves
+      for (const m1 of topN) {
+        const found = simPlace(m1.q, m1.r, cp, () => {
+          if (isWinMove(m1.q, m1.r, pCode(cp))) return { player: cp, mateIn: 1, moves: [m1], type: 'win' };
+          // Check if m1 alone creates 3+ five-threats
+          const wc = countWinCells(cp);
+          if (wc.length >= 3) return { player: cp, mateIn: 2, moves: [m1], threats: wc, type: 'setup' };
+
+          const cands2 = getCandidates();
+          const scored2 = [];
+          for (const c of cands2) {
+            if (_fb.has(nkey(c.q, c.r))) continue;
+            scored2.push({ q: c.q, r: c.r, s: scoreMove(c.q, c.r, cp) });
+          }
+          scored2.sort((a, b) => b.s - a.s);
+          const top2 = scored2.slice(0, 8);
+
+          for (const m2 of top2) {
+            const r2 = simPlace(m2.q, m2.r, cp, () => {
+              if (isWinMove(m2.q, m2.r, pCode(cp))) return true;
+              const wc2 = countWinCells(cp);
+              return wc2.length >= 3 ? wc2 : null;
+            });
+            if (r2 === true) return { player: cp, mateIn: 2, moves: [m1, m2], type: 'setup' };
+            if (r2) return { player: cp, mateIn: 2, moves: [m1, m2], threats: r2, type: 'setup' };
+          }
+          return null;
+        });
+        if (found) return found;
+      }
+    } else {
+      // Try single moves
+      for (const m1 of topN) {
+        const found = simPlace(m1.q, m1.r, cp, () => {
+          if (isWinMove(m1.q, m1.r, pCode(cp))) return { player: cp, mateIn: 1, moves: [m1], type: 'win' };
+          const wc = countWinCells(cp);
+          if (wc.length >= 3) return { player: cp, mateIn: 2, moves: [m1], threats: wc, type: 'setup' };
+          return null;
+        });
+        if (found) return found;
+      }
+    }
+
+    // ── Check four-threat forks (mate-in-3 heuristic) ──
+    const cpFours = countFourThreats(cp);
+    const oppFours = countFourThreats(opp);
+
+    if (cpFours.length >= 4) {
+      return { player: cp, mateIn: 3, threats: cpFours, type: 'fork' };
+    }
+    if (oppFours.length >= 4) {
+      return { player: opp, mateIn: 3, threats: oppFours, type: 'fork' };
+    }
+
+    return null;
+  };
+
   window.scheduleBotMove = function() {
     if (window.botThinking || window.gameOver) return;
     const activePlayer = window.currentPlayer;
