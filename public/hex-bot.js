@@ -1155,16 +1155,17 @@
     }
 
     function evalSide(s) {
+      // Forced wins: 3+ independent threats that opponent can't all block (max 2 moves/turn)
+      if (s[4] >= 2)                    return 5000000; // fork = forced win
+      if (s[3] >= 3)                    return 4500000; // triple threat = forced win
+      if (s[4] >= 1 && s[3] >= 2)      return 4800000; // four + 2 threes = forced win
       let v = 0;
       v += s[5] * 20000;
       v += s[4] * 7500;
       v += s[3] * 4000;   // threes are fork builders
       v += s[2] * 30;
-      if (s[4] >= 2)                    v += 160000;  // fork
-      if (s[4] >= 1 && s[3] >= 2)      v += 60000;
-      if (s[4] >= 1 && s[3] >= 1)      v += 50000;
-      if (s[3] >= 2)                    v += 20000;   // pre-fork
-      if (s[3] >= 3)                    v += 30000;   // triple threat
+      if (s[4] >= 1 && s[3] >= 1)      v += 50000;    // four-three combo (dangerous)
+      if (s[3] >= 2)                    v += 25000;    // pre-fork (building toward forced win)
       return v;
     }
 
