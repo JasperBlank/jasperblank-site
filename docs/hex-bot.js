@@ -813,18 +813,19 @@
       const myDelta = tcAfter.cost - tcBefore.cost;
       const oppDelta = tcOppBefore.cost - tcOppAfter.cost;
 
-      // Crossing the threshold of 2 is CRITICAL
+      // Crossing the threshold of 2 is CRITICAL — opponent has 2 moves/turn,
+      // so 3+ threats they must respond to = forced win
       if (tcAfter.cost > 2 && tcBefore.cost <= 2) {
-        score += 800000; // this move makes our threats unstoppable!
+        score += 5000000; // this move creates unstoppable threats — near instant win
       } else if (tcAfter.cost === 2 && tcBefore.cost < 2) {
-        score += 100000; // one more threat and we win
+        score += 200000; // one more threat and we win
       }
 
       // Reducing opponent from >2 to <=2 is life-saving
       if (tcOppBefore.cost > 2 && tcOppAfter.cost <= 2) {
-        score += 600000; // saved ourselves from forced loss
+        score += 4000000; // saved ourselves from forced loss — near-critical
       } else if (tcOppBefore.cost === 2 && tcOppAfter.cost < 2) {
-        score += 50000;
+        score += 100000;
       }
 
       // General delta bonuses
@@ -1178,13 +1179,13 @@
     const myTC = computeThreatCost(myPlayer);
     const oppTC = computeThreatCost(oppPlayer);
 
-    if (myTC.cost > 2) base += 500000;    // near-forced-win
-    else if (myTC.cost === 2) base += 80000; // very threatening
-    else if (myTC.cost === 1) base += 10000;
+    if (myTC.cost > 2) base += 5000000;   // forced win — unstoppable threats
+    else if (myTC.cost === 2) base += 200000; // very threatening
+    else if (myTC.cost === 1) base += 20000;
 
-    if (oppTC.cost > 2) base -= 500000;    // near-forced-loss
-    else if (oppTC.cost === 2) base -= 80000;
-    else if (oppTC.cost === 1) base -= 10000;
+    if (oppTC.cost > 2) base -= 5000000;   // forced loss — can't block everything
+    else if (oppTC.cost === 2) base -= 200000;
+    else if (oppTC.cost === 1) base -= 20000;
 
     return base;
   }
