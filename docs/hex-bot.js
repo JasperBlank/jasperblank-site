@@ -419,9 +419,9 @@
     openBonus: 2.8,
 
     // ── Combination bonuses (offense) ──
-    fork: 372914,        // forks are KING — nearly 400K!
+    fork: 372914,
     fourThree: 71263,
-    preFork: 100000,     // pre-fork setups hugely valuable (hit ceiling)
+    preFork: 100000,
     tripleThreat: 2000,
 
     // ── Defense (blocking) ──
@@ -434,25 +434,25 @@
     oppPreFork: 711,
 
     // ── SPATIAL: neighbor composition ──
-    ownAdj: 68.6,        // slight clustering bonus now
-    oppAdj: 276,         // pressure near opponent
-    emptyAdj: -86.3,     // empty neighbors less useful (prefer action)
+    ownAdj: 68.6,
+    oppAdj: 276,
+    emptyAdj: -86.3,
 
     // ── SPATIAL: distances ──
-    minDistOwn: -256,     // prefer close to own pieces
+    minDistOwn: -256,
     minDistOpp: -51,
     minDistAny: -200,
     distOwnCOM: -8.1,
     distOppCOM: 14.1,
 
     // ── SPATIAL: directional diversity ──
-    feasibleDirs: 1175,  // still huge
+    feasibleDirs: 1175,
     openDirs: 324,
 
     // ── SPATIAL: spread metrics ──
     openSpace: 23.6,
-    islandBonus: 4513,   // islands even more valuable!
-    bridgeBonus: 5000,   // bridge bonus hit ceiling
+    islandBonus: 4513,
+    bridgeBonus: 5000,
     newQuadrant: 496,
     spreadBonus: -4.6,
 
@@ -462,31 +462,31 @@
     pat_gapBridge: -369,
     pat_adjOppLine: -202,
     pat_openReach: 451,
-    pat_ownThenOpp: 1658, // contested extension is big
+    pat_ownThenOpp: 1658,
     pat_skipAttack: -500,
     pat_longReach: 689,
 
     // Cross-direction:
     pat_vShape: -33.5,
     pat_oppV: -486,
-    pat_trident: -1356,   // spread too thin = bad
-    pat_clamp: 1686,      // clamping still great
+    pat_trident: -1356,
+    pat_clamp: 1686,
 
     // Diagonal/knight neighbors:
     pat_diagOwn: -500,
     pat_diagOpp: 16.3,
     pat_knightOwn: 8.1,
-    pat_knightOpp: 1000,  // blocking opp at knight distance matters!
+    pat_knightOpp: 1000,
 
     // Aggregate:
     pat_ownAdj1: 8.7,
     pat_oppAdj1: 7.8,
-    pat_isolated: -810,   // isolated moves now penalized (more data)
-    pat_surrounded: -2095, // tight space still terrible
+    pat_isolated: -810,
+    pat_surrounded: -2095,
 
     // ── THREAT COST (forcing analysis) ──
-    threatCostGain: 17403,   // creating threats
-    threatCostBlock: 80000,  // BLOCKING threats is #1 priority (hit ceiling!)
+    threatCostGain: 17403,
+    threatCostBlock: 80000,
   };
 
   function w(name) {
