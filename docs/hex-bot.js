@@ -1,18 +1,20 @@
-// ── Hex Tic Tac Toe — Bot AI (v5 — Search Intelligence) ──
+// ── Hex Tic Tac Toe — Bot AI (v6 — Deep Search + MCTS) ──
 // Include this file to enable bot play. Remove it for human-vs-human tournament mode.
 //
-// v5 improvements:
-//  - Transposition table (Zobrist hashing) — never re-evaluate same position
-//  - Killer move heuristic — remember cutoff-causing moves for better ordering
-//  - History heuristic — track globally good moves across entire search
-//  - Late Move Reduction (LMR) — search unpromising moves at reduced depth
-//  - Improved must-block: detects 3-in-a-row threats (urgent) + 4+ (critical)
-//  - Must-block uses BOTH moves when multiple threats exist
-// v4 base:
-//  - Fast numeric board (Map<int,int>) eliminates all string alloc in hot path
-//  - Combined lineScan: length + feasibility + openness in ONE pass
-//  - Accumulative scoring, iterative deepening, alpha-beta pruning
-//  - Distilled shape patterns + spatial features (46 parameters)
+// v6 improvements:
+//  - Quiescence search — extends search in tactical positions (no horizon effect)
+//  - Aspiration windows — narrow search windows for faster iterative deepening
+//  - Better TT replacement — depth-preferred, keeps valuable entries
+//  - Dynamic move width — adapts candidate count to tactical complexity
+//  - Opening book — pre-computed strong opening moves
+//  - Improved threat cost — shared blocker detection (proper set cover)
+//  - Monte Carlo Tree Search (MCTS) — alternative search engine
+//    Set window.botSearchMethod = 'mcts' to use
+// v5 base:
+//  - Transposition table (Zobrist hashing), killer moves, history heuristic
+//  - Late Move Reduction (LMR), must-block detection
+//  - Fast numeric board, combined lineScan, iterative deepening
+//  - Distilled shape patterns + spatial features (51 parameters)
 
 (function() {
   'use strict';
@@ -495,6 +497,77 @@
     return DEFAULTS[name];
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ── OPENING BOOK ──
+  // Pre-computed strong opening moves for the first few moves.
+  // Key = normalized board state, Value = array of good move options.
+  // The bot picks randomly from top options for variety.
+  // ══════════════════════════════════════════════════════════════
+
+  // Normalize position: translate so piece centroid is near origin,
+  // return a canonical key string
+  function normalizeForBook(pieceList) {
+    if (pieceList.length === 0) return 'empty';
+    // Center on first piece
+    const oq = pieceList[0].q, or2 = pieceList[0].r;
+    const pieces = pieceList.map(p => ({
+      q: p.q - oq, r: p.r - or2, player: p.player
+    }));
+    pieces.sort((a, b) => a.q !== b.q ? a.q - b.q : a.r !== b.r ? a.r - b.r : (a.player < b.player ? -1 : 1));
+    return pieces.map(p => `${p.player}:${p.q},${p.r}`).join(';');
+  }
+
+  // Opening book: maps normalized position → [[q_offset, r_offset], ...]
+  // Offsets are relative to first piece's position
+  const OPENING_BOOK = {
+    // Empty board → first move: center
+    'empty': [[0, 0]],
+
+    // X played center. O responds: develop along multiple directions
+    'X:0,0': [
+      [1, 0],   // adjacent — pressure
+      [0, 1],   // adjacent different axis
+      [-1, 1],  // adjacent third axis
+      [2, 0],   // spaced — build own line
+      [0, 2],   // spaced different axis
+    ],
+
+    // X center, O at (1,0) — O's second move (still O's turn, 2 moves)
+    'O:0,0;X:-1,0': [  // normalized: O first at origin
+      [0, 1],   // spread to second axis (creates V shape)
+      [-1, 1],  // third axis
+      [1, 0],   // extend own line
+      [0, -1],  // opposite direction
+    ],
+
+    // X center, O at (0,1)
+    'O:0,0;X:0,-1': [
+      [1, 0],   // spread to second axis
+      [-1, 1],  // third axis
+      [0, 1],   // extend
+    ],
+  };
+
+  function lookupBook(player) {
+    const key = normalizeForBook(window.pieceList);
+    const options = OPENING_BOOK[key];
+    if (!options || options.length === 0) return null;
+
+    const oq = window.pieceList.length > 0 ? window.pieceList[0].q : 0;
+    const or2 = window.pieceList.length > 0 ? window.pieceList[0].r : 0;
+
+    // Filter to unoccupied cells
+    const valid = options.filter(([dq, dr]) => {
+      const q = oq + dq, r = or2 + dr;
+      return !window.board[q + ',' + r];
+    });
+
+    if (valid.length === 0) return null;
+    // Pick randomly from top options for variety
+    const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 3))];
+    return { q: oq + pick[0], r: or2 + pick[1] };
+  }
+
   // ── Accumulative scoring with spatial features ──
   // skipThreatCost: if true, skip expensive threat cost delta (used in deep search)
   function scoreMove(q, r, player, skipThreatCost) {
@@ -958,34 +1031,69 @@
 
     if (threats.length === 0) return { cost: 0, threats: [] };
 
-    // Compute minimum blocks needed via greedy set cover approximation
-    // Sort threats by cost descending, then try to cover them
-    threats.sort((a, b) => b.cost - a.cost);
+    // ── Improved set cover with shared blocker awareness ──
+    // Build a map: blockCell → which threats it covers
+    const cellToThreats = new Map(); // nkey → [threatIndex...]
+    for (let ti = 0; ti < threats.length; ti++) {
+      for (const bk of threats[ti].blockCells) {
+        if (!cellToThreats.has(bk)) cellToThreats.set(bk, []);
+        cellToThreats.get(bk).push(ti);
+      }
+    }
 
-    let totalCost = 0;
-    const blockedCells = new Set(); // cells the opponent has "used" to block
+    // Greedy set cover: pick the blocking cell that covers the most uncovered threats
+    const covered = new Set(); // threat indices that are neutralized
     const activeThreats = [];
+    let totalCost = 0;
 
-    for (const t of threats) {
-      // Check if this threat is already neutralized by a previous block
-      let neutralized = false;
-      for (const bk of t.blockCells) {
-        if (blockedCells.has(bk)) { neutralized = true; break; }
-      }
-      if (neutralized) continue;
-
-      activeThreats.push(t);
-      if (t.cost === 2) {
-        // Both cells must be blocked — uses 2 opponent moves
+    // First pass: handle cost-2 threats (both ends must be blocked)
+    for (let ti = 0; ti < threats.length; ti++) {
+      if (threats[ti].cost === 2 && !covered.has(ti)) {
+        // Both cells must be blocked for this threat
+        activeThreats.push(threats[ti]);
         totalCost += 2;
-        for (const bk of t.blockCells) blockedCells.add(bk);
-      } else {
-        // Any ONE cell blocks it — opponent uses 1 move on the "best" cell
-        // (the one that also covers the most other threats)
-        // For simplicity, pick the first unblocked cell
-        totalCost += 1;
-        blockedCells.add(t.blockCells[0]);
+        for (const bk of threats[ti].blockCells) {
+          // Blocking this cell also covers other threats that share it
+          const shared = cellToThreats.get(bk) || [];
+          for (const si of shared) covered.add(si);
+        }
       }
+    }
+
+    // Second pass: greedily cover remaining cost-1 threats
+    let remaining = threats.filter((t, i) => t.cost === 1 && !covered.has(i));
+    while (remaining.length > 0) {
+      // Find the blocking cell that covers the most remaining threats
+      let bestCell = -1, bestCount = 0;
+      const remIndices = new Set(remaining.map((_, i) => {
+        // Find original index
+        for (let ti = 0; ti < threats.length; ti++) {
+          if (threats[ti] === remaining[i] && !covered.has(ti)) return ti;
+        }
+        return -1;
+      }));
+
+      for (const [cellNk, threatIndices] of cellToThreats) {
+        let count = 0;
+        for (const ti of threatIndices) {
+          if (!covered.has(ti) && threats[ti].cost === 1) count++;
+        }
+        if (count > bestCount) { bestCount = count; bestCell = cellNk; }
+      }
+
+      if (bestCell === -1 || bestCount === 0) break;
+
+      // Use this cell — costs 1 move, covers all threats it touches
+      totalCost += 1;
+      const coveredByThis = cellToThreats.get(bestCell) || [];
+      for (const ti of coveredByThis) {
+        if (!covered.has(ti)) {
+          covered.add(ti);
+          activeThreats.push(threats[ti]);
+        }
+      }
+
+      remaining = threats.filter((t, i) => t.cost === 1 && !covered.has(i));
     }
 
     return { cost: totalCost, threats: activeThreats };
@@ -1281,6 +1389,11 @@
   function botPickMovesMedium(activePlayer) {
     const player = activePlayer;
     const hasTwo = window.movesLeft >= 2;
+    // Opening book: use pre-computed moves for first few moves
+    if (window.pieceList.length <= 5) {
+      const bookMove = lookupBook(player);
+      if (bookMove) return hasTwo ? [bookMove] : [bookMove]; // single book move, let second be scored
+    }
     const winMoves = findWinningMoves(player, hasTwo);
     if (winMoves) return winMoves;
     if (!hasTwo) {
@@ -1377,6 +1490,128 @@
   const _placedStack = [];
   let _placedLen = 0;
 
+  // ── Quiescence search: extend search in tactical positions ──
+  // Only considers win moves, must-blocks, and 4+-creating moves.
+  // Prevents horizon effect where search stops right before a forced sequence.
+  function qSearch(turnPlayer, rootPlayer, qDepth, movesLeftInTurn, alpha, beta) {
+    const standPat = evalBoard(rootPlayer);
+    const isMax = (turnPlayer === rootPlayer);
+
+    // Stand-pat cutoff
+    if (isMax) {
+      if (standPat >= beta) return standPat;
+      if (standPat > alpha) alpha = standPat;
+    } else {
+      if (standPat <= alpha) return standPat;
+      if (standPat < beta) beta = standPat;
+    }
+
+    if (qDepth <= 0) return standPat;
+
+    const pc = pCode(turnPlayer);
+    const opp = turnPlayer === 'X' ? 'O' : 'X';
+
+    // Check if position is "noisy" — only extend if there are active threats
+    // Gather only tactical moves: win moves, must-blocks, and 4-creators
+    const tacticalMoves = [];
+    const seen = new Set();
+
+    // Win moves
+    for (const [nk, v] of _fb) {
+      if (v !== pc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+      for (let d = 0; d < 6; d++) {
+        const nq = pq + ALL_DQ[d], nr = pr + ALL_DR[d];
+        const cnk = nkey(nq, nr);
+        if (seen.has(cnk) || _fb.has(cnk)) continue;
+        seen.add(cnk);
+        if (isWinMove(nq, nr, pc)) tacticalMoves.push({ q: nq, r: nr, priority: 10000 });
+      }
+    }
+
+    // Must-block cells (critical only — 4+ in a row threats)
+    const opc = pCode(opp);
+    const critBlocks = [];
+    const checked = new Set();
+    for (const [nk, v] of _fb) {
+      if (v !== opc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+      for (let di = 0; di < 3; di++) {
+        const dq = DIR3_DQ[di], dr = DIR3_DR[di];
+        let sq = pq, sr = pr;
+        while (_fb.get(nkey(sq - dq, sr - dr)) === opc) { sq -= dq; sr -= dr; }
+        const rk = nkey(sq, sr) * 4 + di;
+        if (checked.has(rk)) continue;
+        checked.add(rk);
+        let len = 0, cq = sq, cr = sr;
+        while (_fb.get(nkey(cq, cr)) === opc) { len++; cq += dq; cr += dr; }
+        if (len < 4) continue;
+        const bk1 = nkey(sq - dq, sr - dr);
+        if (!_fb.has(bk1) && !seen.has(bk1)) { seen.add(bk1); critBlocks.push({ q: sq - dq, r: sr - dr }); }
+        const bk2 = nkey(cq, cr);
+        if (!_fb.has(bk2) && !seen.has(bk2)) { seen.add(bk2); critBlocks.push({ q: cq, r: cr }); }
+      }
+    }
+    for (const b of critBlocks) tacticalMoves.push({ q: b.q, r: b.r, priority: 5000 });
+
+    // Moves creating 4+ in own lines
+    for (const [nk, v] of _fb) {
+      if (v !== pc) continue;
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+      for (let d = 0; d < 6; d++) {
+        const nq = pq + ALL_DQ[d], nr = pr + ALL_DR[d];
+        const cnk = nkey(nq, nr);
+        if (seen.has(cnk) || _fb.has(cnk)) continue;
+        // Quick check: does placing here create a line of 4+?
+        let dominated = false;
+        for (let di = 0; di < 3; di++) {
+          const scan = lineScan(nq, nr, DIR3_DQ[di], DIR3_DR[di], pc);
+          if ((scan & 0xFF) >= 4 && (scan & 0x100)) { dominated = true; break; }
+        }
+        if (dominated) { seen.add(cnk); tacticalMoves.push({ q: nq, r: nr, priority: 2000 }); }
+      }
+    }
+
+    // If no tactical moves, position is quiet — return stand-pat
+    if (tacticalMoves.length === 0) return standPat;
+
+    // Sort by priority
+    tacticalMoves.sort((a, b) => b.priority - a.priority);
+    const maxMoves = Math.min(tacticalMoves.length, 6); // cap width
+
+    let bestVal = standPat;
+
+    for (let i = 0; i < maxMoves; i++) {
+      const m = tacticalMoves[i];
+      _nodesSearched++;
+
+      const v = simPlace(m.q, m.r, turnPlayer, () => {
+        if (isWinMove(m.q, m.r, pc)) return isMax ? WIN : LOSS;
+        const newML = movesLeftInTurn - 1;
+        if (newML > 0) {
+          return qSearch(turnPlayer, rootPlayer, qDepth - 1, newML, alpha, beta);
+        } else {
+          return qSearch(opp, rootPlayer, qDepth - 1, 2, alpha, beta);
+        }
+      });
+
+      if (isMax) {
+        if (v > bestVal) bestVal = v;
+        if (bestVal > alpha) alpha = bestVal;
+        if (alpha >= beta) break;
+      } else {
+        if (v < bestVal) bestVal = v;
+        if (bestVal < beta) beta = bestVal;
+        if (alpha >= beta) break;
+      }
+    }
+
+    return bestVal;
+  }
+
   function abSearch(turnPlayer, rootPlayer, depthRemaining, movesLeftInTurn,
                     currentPly, alpha, beta) {
     const isMax = (turnPlayer === rootPlayer);
@@ -1384,7 +1619,10 @@
     const opp = tp === 'X' ? 'O' : 'X';
     const pc = pCode(tp);
 
-    if (depthRemaining <= 0) return evalBoard(rootPlayer);
+    if (depthRemaining <= 0) {
+      // ── Quiescence search: don't stop in noisy positions ──
+      return qSearch(turnPlayer, rootPlayer, 4, movesLeftInTurn, alpha, beta);
+    }
 
     // ── Transposition table lookup ──
     const ttKey = _boardHash ^ _turnHash[pc][movesLeftInTurn];
@@ -1400,7 +1638,7 @@
       ttBestNk = ttEntry.bestNk;
     }
 
-    const width = currentPly <= 2 ? 7 : currentPly <= 4 ? 5 : currentPly <= 6 ? 4 : 3;
+    const baseWidth = currentPly <= 2 ? 7 : currentPly <= 4 ? 5 : currentPly <= 6 ? 4 : 3;
     const useQuick = currentPly >= 8;
 
     const placed = _placedStack.slice(0, _placedLen);
@@ -1430,6 +1668,12 @@
       scored.push({ q: c.q, r: c.r, s: evalScore, order: evalScore + priority });
     }
     scored.sort((a, b) => b.order - a.order);
+    // Dynamic width: count high-priority tactical moves, always include them
+    let tacticalCount = 0;
+    for (let i = 0; i < scored.length && i < 12; i++) {
+      if (scored[i].order >= 500000) tacticalCount++; // TT best + killers
+    }
+    const width = Math.max(baseWidth, Math.min(tacticalCount + 2, 10));
     const len = Math.min(scored.length, width);
     if (len === 0) return evalBoard(rootPlayer);
 
@@ -1456,7 +1700,7 @@
         if (newML > 0) {
           return abSearch(tp, rootPlayer, depthRemaining - reduction, newML, currentPly + 1, alpha, beta);
         } else if (depthRemaining - reduction <= 1) {
-          return evalBoard(rootPlayer);
+          return qSearch(opp, rootPlayer, 4, 2, alpha, beta);
         } else {
           return abSearch(opp, rootPlayer, depthRemaining - 1 - reduction, 2, currentPly + 1, alpha, beta);
         }
@@ -1510,10 +1754,27 @@
       }
     }
 
-    // ── Store in transposition table ──
+    // ── Store in transposition table (depth-preferred replacement) ──
     const flag = bestVal <= origAlpha ? TT_UPPER : bestVal >= beta ? TT_LOWER : TT_EXACT;
-    if (_tt.size >= TT_MAX) _tt.clear(); // simple eviction
-    _tt.set(ttKey, { depth: depthRemaining, value: bestVal, flag, bestNk: bestMoveNk });
+    const existing = _tt.get(ttKey);
+    if (!existing || existing.depth <= depthRemaining || existing.flag !== TT_EXACT) {
+      if (_tt.size >= TT_MAX) {
+        // Evict ~25% of entries (prefer keeping deep ones)
+        let evicted = 0;
+        for (const [k, e] of _tt) {
+          if (evicted >= TT_MAX / 4) break;
+          if (e.depth <= 1) { _tt.delete(k); evicted++; }
+        }
+        if (_tt.size >= TT_MAX) {
+          // Still full — evict more aggressively
+          for (const [k] of _tt) {
+            if (_tt.size < TT_MAX * 0.75) break;
+            _tt.delete(k);
+          }
+        }
+      }
+      _tt.set(ttKey, { depth: depthRemaining, value: bestVal, flag, bestNk: bestMoveNk });
+    }
 
     return bestVal;
   }
@@ -1523,6 +1784,12 @@
     const opponent = player === 'X' ? 'O' : 'X';
     const hasTwo = window.movesLeft >= 2;
     const pc = pCode(player);
+
+    // Opening book for early game
+    if (window.pieceList.length <= 5) {
+      const bookMove = lookupBook(player);
+      if (bookMove) return [bookMove]; // use book for first move of pair, let search handle second
+    }
 
     const winMoves = findWinningMoves(player, hasTwo);
     if (winMoves) {
@@ -1614,25 +1881,47 @@
       let bestMove = topN[0];
       const withScores = topN.map(c => ({ ...c, searchScore: c.s }));
 
+      let prevBestScore = 0;
       for (let depth = 1; depth <= maxDepth; depth++) {
         withScores.sort((a, b) => b.searchScore - a.searchScore);
-        let alpha = -Infinity, currentBest = withScores[0], currentBestScore = -Infinity;
 
-        for (const c of withScores) {
-          _nodesSearched++;
-          _placedStack[0] = c; _placedLen = 1;
-          const s = simPlace(c.q, c.r, player, () => {
-            if (isWinMove(c.q, c.r, pc)) return WIN;
-            if (depth <= 1) return c.s + evalBoard(player) * 0.5;
-            return abSearch(opponent, player, depth - 1, 2, 2, alpha, Infinity);
-          });
-          _placedLen = 0;
-          c.searchScore = s;
-          if (s > currentBestScore) { currentBestScore = s; currentBest = c; }
-          if (s > alpha) alpha = s;
-          if (currentBestScore >= WIN) break;
+        // Aspiration window: start with narrow window around previous best
+        let aspAlpha = depth >= 3 ? prevBestScore - 300 : -Infinity;
+        let aspBeta = depth >= 3 ? prevBestScore + 300 : Infinity;
+        let currentBest = withScores[0], currentBestScore = -Infinity;
+        let needResearch = false;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let alpha = aspAlpha;
+          currentBest = withScores[0]; currentBestScore = -Infinity;
+
+          for (const c of withScores) {
+            _nodesSearched++;
+            _placedStack[0] = c; _placedLen = 1;
+            const s = simPlace(c.q, c.r, player, () => {
+              if (isWinMove(c.q, c.r, pc)) return WIN;
+              if (depth <= 1) return c.s + evalBoard(player) * 0.5;
+              return abSearch(opponent, player, depth - 1, 2, 2, alpha, aspBeta);
+            });
+            _placedLen = 0;
+            c.searchScore = s;
+            if (s > currentBestScore) { currentBestScore = s; currentBest = c; }
+            if (s > alpha) alpha = s;
+            if (currentBestScore >= WIN) break;
+          }
+
+          // Check if aspiration window failed
+          if (currentBestScore <= aspAlpha || currentBestScore >= aspBeta) {
+            if (attempt === 0 && currentBestScore < WIN) {
+              aspAlpha = -Infinity; aspBeta = Infinity; // re-search with full window
+              continue;
+            }
+          }
+          break;
         }
+
         bestMove = currentBest;
+        prevBestScore = currentBestScore;
         if (currentBestScore >= WIN) break;
       }
 
@@ -1664,34 +1953,46 @@
     }
 
     let bestPair = pairs[0] ? [pairs[0].m1, pairs[0].m2] : [topN[0], topN[1] || topN[0]];
+    let prevPairBest = 0;
 
     for (let depth = 1; depth <= maxDepth; depth++) {
       pairs.sort((a, b) => b.searchScore - a.searchScore);
-      let alpha = -Infinity, bestScore = -Infinity;
+      let aspAlpha = depth >= 3 ? prevPairBest - 300 : -Infinity;
+      let aspBeta = depth >= 3 ? prevPairBest + 300 : Infinity;
       const pairsToEval = depth <= 2 ? pairs.length :
         Math.min(pairs.length, Math.max(20, Math.floor(pairs.length * 0.5)));
 
-      for (let pi = 0; pi < pairsToEval; pi++) {
-        const pair = pairs[pi];
-        _nodesSearched++;
-        _placedStack[0] = pair.m1; _placedStack[1] = pair.m2; _placedLen = 2;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let alpha = aspAlpha, bestScore = -Infinity;
 
-        const s = simPlace(pair.m1.q, pair.m1.r, player, () => {
-          if (isWinMove(pair.m1.q, pair.m1.r, pc)) return WIN;
-          return simPlace(pair.m2.q, pair.m2.r, player, () => {
-            if (isWinMove(pair.m2.q, pair.m2.r, pc)) return WIN;
-            if (depth <= 1) return pair.m1.s + pair.m2.s + evalBoard(player) * 0.5;
-            return abSearch(opponent, player, depth - 1, 2, 3, alpha, Infinity);
+        for (let pi = 0; pi < pairsToEval; pi++) {
+          const pair = pairs[pi];
+          _nodesSearched++;
+          _placedStack[0] = pair.m1; _placedStack[1] = pair.m2; _placedLen = 2;
+
+          const s = simPlace(pair.m1.q, pair.m1.r, player, () => {
+            if (isWinMove(pair.m1.q, pair.m1.r, pc)) return WIN;
+            return simPlace(pair.m2.q, pair.m2.r, player, () => {
+              if (isWinMove(pair.m2.q, pair.m2.r, pc)) return WIN;
+              if (depth <= 1) return pair.m1.s + pair.m2.s + evalBoard(player) * 0.5;
+              return abSearch(opponent, player, depth - 1, 2, 3, alpha, aspBeta);
+            });
           });
-        });
 
-        _placedLen = 0;
-        pair.searchScore = s;
-        if (s > bestScore) { bestScore = s; bestPair = [pair.m1, pair.m2]; }
-        if (s > alpha) alpha = s;
-        if (bestScore >= WIN) break;
+          _placedLen = 0;
+          pair.searchScore = s;
+          if (s > bestScore) { bestScore = s; bestPair = [pair.m1, pair.m2]; }
+          if (s > alpha) alpha = s;
+          if (bestScore >= WIN) break;
+        }
+
+        prevPairBest = bestScore;
+        if ((bestScore <= aspAlpha || bestScore >= aspBeta) && attempt === 0 && bestScore < WIN) {
+          aspAlpha = -Infinity; aspBeta = Infinity; continue;
+        }
+        break;
       }
-      if (bestScore >= WIN) break;
+      if (prevPairBest >= WIN) break;
     }
 
     window.botNodesSearched = _nodesSearched;
@@ -1699,12 +2000,331 @@
     return applyMustBlock(bestPair, player, true);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ── MONTE CARLO TREE SEARCH (MCTS) ──
+  // Alternative search method: uses random rollouts guided by evaluation
+  // to explore the game tree. Excels in positions where alpha-beta's
+  // narrow width misses creative moves.
+  // ══════════════════════════════════════════════════════════════
+
+  class MCTSNode {
+    constructor(move, parent, turnPlayer, movesLeftInTurn) {
+      this.move = move; // {q, r} or null for root
+      this.parent = parent;
+      this.children = [];
+      this.visits = 0;
+      this.totalValue = 0;
+      this.turnPlayer = turnPlayer;
+      this.movesLeft = movesLeftInTurn;
+      this.untriedMoves = null; // lazy init
+      this.isTerminal = false;
+    }
+
+    ucb1(parentVisits, explorationC) {
+      if (this.visits === 0) return Infinity;
+      return (this.totalValue / this.visits) +
+        explorationC * Math.sqrt(Math.log(parentVisits) / this.visits);
+    }
+
+    bestChild(explorationC) {
+      let best = null, bestUCB = -Infinity;
+      for (const c of this.children) {
+        const u = c.ucb1(this.visits, explorationC);
+        if (u > bestUCB) { bestUCB = u; best = c; }
+      }
+      return best;
+    }
+  }
+
+  function mctsGetMoves(turnPlayer) {
+    const pc = pCode(turnPlayer);
+    // Get candidates and score top ones quickly
+    const cands = getCandidates();
+    const moves = [];
+    for (const c of cands) {
+      if (_fb.has(nkey(c.q, c.r))) continue;
+      moves.push({ q: c.q, r: c.r, qs: quickScore(c.q, c.r, pc) });
+    }
+    moves.sort((a, b) => b.qs - a.qs);
+    return moves.slice(0, 15); // top 15 candidates
+  }
+
+  // Weighted random move selection for rollouts
+  function rolloutMove(turnPlayer) {
+    const pc = pCode(turnPlayer);
+    const cands = [];
+    // Quick scan of neighbors of existing pieces
+    for (const [nk, v] of _fb) {
+      const pr = Math.floor(nk / 20001) - 10000;
+      const pq = (nk % 20001) - 10000;
+      for (let d = 0; d < 6; d++) {
+        const nq = pq + ALL_DQ[d], nr = pr + ALL_DR[d];
+        const cnk = nkey(nq, nr);
+        if (_fb.has(cnk)) continue;
+        // Check for win
+        if (isWinMove(nq, nr, pc)) return { q: nq, r: nr, isWin: true };
+        cands.push({ q: nq, r: nr, nk: cnk });
+      }
+    }
+    if (cands.length === 0) return null;
+    // Dedup
+    const seen = new Set();
+    const unique = [];
+    for (const c of cands) {
+      if (seen.has(c.nk)) continue;
+      seen.add(c.nk);
+      unique.push(c);
+    }
+    // Weighted random: score top moves, softmax selection
+    const scored = unique.slice(0, 20).map(c => ({
+      ...c, s: quickScore(c.q, c.r, pc)
+    }));
+    const maxS = Math.max(...scored.map(c => c.s));
+    const temp = 50; // temperature for softmax
+    let totalW = 0;
+    for (const c of scored) { c.w = Math.exp((c.s - maxS) / temp); totalW += c.w; }
+    let r = Math.random() * totalW;
+    for (const c of scored) { r -= c.w; if (r <= 0) return c; }
+    return scored[scored.length - 1];
+  }
+
+  // Run a rollout from current board state, return score [-1, 1] for rootPlayer
+  function mctsRollout(turnPlayer, rootPlayer, movesLeft, maxMoves) {
+    let depth = 0;
+    let cp = turnPlayer, ml = movesLeft;
+    const undoStack = [];
+
+    while (depth < maxMoves) {
+      const pc = pCode(cp);
+      const move = rolloutMove(cp);
+      if (!move) break;
+
+      const k = move.q + ',' + move.r;
+      const nk = nkey(move.q, move.r);
+      const zh = getZobrist(move.q, move.r, pc);
+      window.board[k] = cp;
+      _fb.set(nk, pc);
+      _boardHash ^= zh;
+      window.comCache[cp].sq += move.q; window.comCache[cp].sr += move.r; window.comCache[cp].n++;
+      undoStack.push({ q: move.q, r: move.r, k, nk, pc, zh, player: cp });
+      depth++;
+
+      if (move.isWin || isWinMove(move.q, move.r, pc)) {
+        // Winner found
+        const result = (cp === rootPlayer) ? 1 : -1;
+        // Undo all
+        for (let i = undoStack.length - 1; i >= 0; i--) {
+          const u = undoStack[i];
+          delete window.board[u.k];
+          _fb.delete(u.nk);
+          _boardHash ^= u.zh;
+          window.comCache[u.player].sq -= u.q; window.comCache[u.player].sr -= u.r; window.comCache[u.player].n--;
+        }
+        return result;
+      }
+
+      ml--;
+      if (ml <= 0) {
+        cp = cp === 'X' ? 'O' : 'X';
+        ml = 2;
+      }
+    }
+
+    // No winner in maxMoves — use eval
+    const evalVal = evalBoard(rootPlayer);
+    const normalized = Math.max(-1, Math.min(1, evalVal / 50000)); // normalize to [-1, 1]
+
+    // Undo all
+    for (let i = undoStack.length - 1; i >= 0; i--) {
+      const u = undoStack[i];
+      delete window.board[u.k];
+      _fb.delete(u.nk);
+      _boardHash ^= u.zh;
+      window.comCache[u.player].sq -= u.q; window.comCache[u.player].sr -= u.r; window.comCache[u.player].n--;
+    }
+    return normalized;
+  }
+
+  function mctsSearch(rootPlayer, timeBudgetMs) {
+    const hasTwo = window.movesLeft >= 2;
+    const root = new MCTSNode(null, null, rootPlayer, hasTwo ? 2 : 1);
+    const explorationC = 1.4;
+    const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const getTime = typeof performance !== 'undefined' ? () => performance.now() : () => Date.now();
+    let iterations = 0;
+
+    while (getTime() - startTime < timeBudgetMs) {
+      iterations++;
+
+      // ── Selection: walk down tree using UCB1 ──
+      let node = root;
+      const moveStack = []; // track placed moves for undo
+
+      while (node.children.length > 0 && (node.untriedMoves === null || node.untriedMoves.length === 0)) {
+        // Pick child by UCB1 — maximize for root player, minimize for opponent
+        const isMax = (node.turnPlayer === rootPlayer);
+        if (isMax) {
+          node = node.bestChild(explorationC);
+        } else {
+          // For opponent nodes, pick the child with LOWEST value (best for opponent)
+          let worst = null, worstUCB = Infinity;
+          for (const c of node.children) {
+            const u = c.visits === 0 ? -Infinity :
+              -(c.totalValue / c.visits) + explorationC * Math.sqrt(Math.log(node.visits) / c.visits);
+            if (u < worstUCB || c.visits === 0) { worstUCB = u; worst = c; }
+          }
+          node = worst || node.bestChild(explorationC);
+        }
+
+        if (node.move) {
+          const pc = pCode(node.parent.turnPlayer);
+          const k = node.move.q + ',' + node.move.r;
+          const nk = nkey(node.move.q, node.move.r);
+          const zh = getZobrist(node.move.q, node.move.r, pc);
+          window.board[k] = node.parent.turnPlayer;
+          _fb.set(nk, pc);
+          _boardHash ^= zh;
+          window.comCache[node.parent.turnPlayer].sq += node.move.q;
+          window.comCache[node.parent.turnPlayer].sr += node.move.r;
+          window.comCache[node.parent.turnPlayer].n++;
+          moveStack.push({ q: node.move.q, r: node.move.r, k, nk, pc, zh, player: node.parent.turnPlayer });
+        }
+
+        if (node.isTerminal) break;
+      }
+
+      // ── Expansion: add one untried move ──
+      if (!node.isTerminal) {
+        if (node.untriedMoves === null) {
+          node.untriedMoves = mctsGetMoves(node.turnPlayer);
+          // Remove moves that are already children
+          const childKeys = new Set(node.children.map(c => c.move ? nkey(c.move.q, c.move.r) : -1));
+          node.untriedMoves = node.untriedMoves.filter(m => !childKeys.has(nkey(m.q, m.r)));
+        }
+
+        if (node.untriedMoves.length > 0) {
+          const move = node.untriedMoves.pop();
+          const newML = node.movesLeft - 1;
+          let nextPlayer = node.turnPlayer;
+          let nextML = newML;
+          if (newML <= 0) {
+            nextPlayer = node.turnPlayer === 'X' ? 'O' : 'X';
+            nextML = 2;
+          }
+
+          const child = new MCTSNode(move, node, nextPlayer, nextML);
+          node.children.push(child);
+
+          // Place this move
+          const pc = pCode(node.turnPlayer);
+          const k = move.q + ',' + move.r;
+          const nk = nkey(move.q, move.r);
+          const zh = getZobrist(move.q, move.r, pc);
+          window.board[k] = node.turnPlayer;
+          _fb.set(nk, pc);
+          _boardHash ^= zh;
+          window.comCache[node.turnPlayer].sq += move.q;
+          window.comCache[node.turnPlayer].sr += move.r;
+          window.comCache[node.turnPlayer].n++;
+          moveStack.push({ q: move.q, r: move.r, k, nk, pc, zh, player: node.turnPlayer });
+
+          // Check if terminal
+          if (isWinMove(move.q, move.r, pc)) {
+            child.isTerminal = true;
+          }
+
+          node = child;
+        }
+      }
+
+      // ── Simulation: rollout from current position ──
+      let value;
+      if (node.isTerminal) {
+        // The move that got us here was a win for the parent's turn player
+        value = (moveStack.length > 0 && moveStack[moveStack.length - 1].player === rootPlayer) ? 1 : -1;
+      } else {
+        value = mctsRollout(node.turnPlayer, rootPlayer, node.movesLeft, 30);
+      }
+
+      // ── Backpropagation ──
+      let n = node;
+      while (n !== null) {
+        n.visits++;
+        n.totalValue += value;
+        n = n.parent;
+      }
+
+      // ── Undo all placed moves ──
+      for (let i = moveStack.length - 1; i >= 0; i--) {
+        const u = moveStack[i];
+        delete window.board[u.k];
+        _fb.delete(u.nk);
+        _boardHash ^= u.zh;
+        window.comCache[u.player].sq -= u.q;
+        window.comCache[u.player].sr -= u.r;
+        window.comCache[u.player].n--;
+      }
+    }
+
+    // Pick best move(s) by visit count
+    root.children.sort((a, b) => b.visits - a.visits);
+
+    const moves = [];
+    if (root.children.length > 0) {
+      const best = root.children[0];
+      moves.push(best.move);
+
+      // If we need 2 moves, find best second move from that child's children
+      if (hasTwo && best.children.length > 0) {
+        best.children.sort((a, b) => b.visits - a.visits);
+        moves.push(best.children[0].move);
+      } else if (hasTwo) {
+        // Fallback: use scoreMove for second move
+        const m1 = best.move;
+        simPlace(m1.q, m1.r, rootPlayer, () => {
+          const cands = getCandidates();
+          let bestS = -Infinity, bestM = cands[0];
+          for (const c of cands) {
+            if (_fb.has(nkey(c.q, c.r))) continue;
+            const s = scoreMove(c.q, c.r, rootPlayer, true);
+            if (s > bestS) { bestS = s; bestM = c; }
+          }
+          moves.push(bestM);
+        });
+      }
+    }
+
+    window.botNodesSearched = iterations;
+    window.botPruned = 0;
+    window.botSearchDepth = 0;
+    return moves;
+  }
+
+  function botPickMovesMCTS(activePlayer) {
+    const player = activePlayer;
+    const hasTwo = window.movesLeft >= 2;
+
+    // Check for instant wins first
+    const winMoves = findWinningMoves(player, hasTwo);
+    if (winMoves) return winMoves;
+
+    // Time budget based on difficulty
+    const timeBudgets = { easy: 200, medium: 1000, hard: 3000 };
+    const diff = window.botDifficulty || 'medium';
+    const budget = timeBudgets[diff] || 1000;
+
+    const result = mctsSearch(player, budget);
+    return applyMustBlock(result, player, hasTwo);
+  }
+
   // ── Bot dispatch ──
   window.botPickMoves = function(activePlayer) {
     const player = activePlayer || window.botPlayer;
     const diff = window.botDifficulty || 'medium';
+    const searchMethod = window.botSearchMethod || 'ab'; // 'ab', 'mcts', 'hybrid'
     syncFastBoard(); // sync numeric board before any computation
     if (diff === 'easy') return botPickMovesGreedy(player);
+    if (searchMethod === 'mcts') return botPickMovesMCTS(player);
     if (diff === 'medium') return botPickMovesMedium(player);
     return botPickMovesHard(player);
   };
