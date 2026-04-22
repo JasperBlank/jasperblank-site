@@ -143,7 +143,7 @@
 
   /* How-to-win diagram */
   .howto {
-    width: min(32rem, 92%);
+    width: min(42rem, 94%);
     margin: 0.5rem 0 1.5rem;
     display: flex;
     flex-direction: column;
@@ -158,8 +158,9 @@
   }
   .scenario {
     display: flex;
-    align-items: center;
-    gap: 0.4rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
     padding: 0.55rem 0.7rem;
     border: 1px solid var(--border);
     border-radius: 3px;
@@ -167,17 +168,25 @@
     overflow: hidden;
     cursor: default;
   }
+  .scenario .steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
   .scenario .explain {
     color: var(--dim);
     font-size: 0.7rem;
     letter-spacing: 0.1em;
-    margin-left: auto;
     font-style: italic;
-    max-width: 10rem;
-    text-align: right;
+    text-align: center;
     line-height: 1.35;
   }
   .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     font-family: ui-monospace, monospace;
     font-size: 0.7rem;
     letter-spacing: 0.05em;
@@ -191,6 +200,19 @@
   }
   .chip.p1 { transform: translateY(-4px); }
   .chip.p2 { transform: translateY(4px); }
+  .chip[data-player]::before {
+    content: attr(data-player);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.1rem;
+    padding: 0.05rem 0.2rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    line-height: 1;
+    opacity: 0.9;
+  }
   .chip.commit { color: var(--accent); border-color: var(--accent); }
   .chip.dots { border: none; background: none; }
   .chip.arrow { border: none; background: none; color: var(--dim); padding: 0 0.1rem; }
@@ -299,27 +321,33 @@
     <div class="caption">HOW IT ENDS &mdash; hover to replay</div>
 
     <div class="scenario" title="Draw">
-      <span class="chip dots" style="--i:0">&hellip;</span>
-      <span class="chip p2" style="--i:1">check</span>
-      <span class="chip p1" style="--i:2">check</span>
-      <span class="chip p2" style="--i:3">check</span>
-      <span class="chip p1 commit" style="--i:4">COMMIT</span>
-      <span class="chip p2" style="--i:5">check</span>
-      <span class="chip p1 commit" style="--i:6">mate</span>
-      <span class="chip arrow" style="--i:7">&rarr;</span>
-      <span class="chip outcome draw" style="--i:8">DRAW</span>
+      <div class="steps">
+        <span class="chip dots" style="--i:0">&hellip;</span>
+        <span class="chip p2" data-player="B" style="--i:1">check</span>
+        <span class="chip p1" data-player="A" style="--i:2">check</span>
+        <span class="chip p2" data-player="B" style="--i:3">check</span>
+        <span class="chip p1 commit" data-player="A" style="--i:4">COMMIT</span>
+        <span class="chip p2" data-player="B" style="--i:5">check</span>
+        <span class="chip p1 commit" data-player="A" style="--i:6">mate</span>
+        <span class="chip arrow" style="--i:7">&rarr;</span>
+        <span class="chip outcome draw" style="--i:8">DRAW</span>
+      </div>
+      <div class="explain">A commits. B does not. The round ends in a draw.</div>
     </div>
 
     <div class="scenario" title="Win">
-      <span class="chip dots" style="--i:0">&hellip;</span>
-      <span class="chip p2" style="--i:1">check</span>
-      <span class="chip p1" style="--i:2">check</span>
-      <span class="chip p2" style="--i:3">check</span>
-      <span class="chip p1 commit" style="--i:4">COMMIT</span>
-      <span class="chip p2 commit" style="--i:5">COMMIT</span>
-      <span class="chip p1 commit" style="--i:6">mate</span>
-      <span class="chip arrow" style="--i:7">&rarr;</span>
-      <span class="chip outcome win" style="--i:8">WIN</span>
+      <div class="steps">
+        <span class="chip dots" style="--i:0">&hellip;</span>
+        <span class="chip p2" data-player="B" style="--i:1">check</span>
+        <span class="chip p1" data-player="A" style="--i:2">check</span>
+        <span class="chip p2" data-player="B" style="--i:3">check</span>
+        <span class="chip p1 commit" data-player="A" style="--i:4">COMMIT</span>
+        <span class="chip p2 commit" data-player="B" style="--i:5">COMMIT</span>
+        <span class="chip p1 commit" data-player="A" style="--i:6">mate</span>
+        <span class="chip arrow" style="--i:7">&rarr;</span>
+        <span class="chip outcome win" style="--i:8">A WINS</span>
+      </div>
+      <div class="explain">A commits first. B commits too. A wins the round.</div>
     </div>
   </div>
 </div>
@@ -470,7 +498,6 @@
 
   function startGame(n1, n2) {
     state.names = { 1: n1 || 'Player 1', 2: n2 || 'Player 2' };
-    state.score = { 1: 0, 2: 0 };
     state.turn = Math.random() < 0.5 ? 1 : 2;
     state.lastStarter = state.turn;
     state.count = 0;
@@ -494,6 +521,11 @@
   }
 
   function resetToSetup() {
+    state.turn = 1;
+    state.lastStarter = null;
+    state.count = 0;
+    state.committed = { 1: false, 2: false };
+    state.firstCommitter = null;
     state.phase = 'setup';
     els.endOverlay.classList.remove('show');
     els.setupOverlay.classList.add('show');
