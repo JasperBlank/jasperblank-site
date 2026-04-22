@@ -194,9 +194,9 @@
   /* Hover animation: chips slide in from the left, one after another */
   .scenario .chip { opacity: 1; transform-origin: left center; }
   .scenario:hover .chip {
-    animation: slideIn 0.35s ease backwards;
+    animation: slideIn 0.6s ease backwards;
   }
-  .scenario:hover .chip { animation-delay: calc(var(--i, 0) * 90ms); }
+  .scenario:hover .chip { animation-delay: calc(var(--i, 0) * 220ms); }
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(-8px) translateY(var(--ty, 0)); }
     to   { opacity: 1; transform: translateX(0) translateY(var(--ty, 0)); }
@@ -274,36 +274,6 @@
   <h1>MIND CHESS</h1>
   <p>Check. Check. Check. &mdash; Checkmate.</p>
 
-  <div class="howto">
-    <div class="caption">HOW IT ENDS &mdash; hover to replay</div>
-
-    <div class="scenario" title="Draw">
-      <span class="chip p1" style="--i:0">check</span>
-      <span class="chip p2" style="--i:1">check</span>
-      <span class="chip p1" style="--i:2">check</span>
-      <span class="chip dots" style="--i:3">&hellip;</span>
-      <span class="chip p1 commit" style="--i:4">COMMIT</span>
-      <span class="chip p2" style="--i:5">check</span>
-      <span class="chip p1 commit" style="--i:6">mate</span>
-      <span class="chip arrow" style="--i:7">&rarr;</span>
-      <span class="chip outcome draw" style="--i:8">DRAW</span>
-      <span class="explain">you committed, they held their nerve</span>
-    </div>
-
-    <div class="scenario" title="Win">
-      <span class="chip p1" style="--i:0">check</span>
-      <span class="chip p2" style="--i:1">check</span>
-      <span class="chip p1" style="--i:2">check</span>
-      <span class="chip dots" style="--i:3">&hellip;</span>
-      <span class="chip p1 commit" style="--i:4">COMMIT</span>
-      <span class="chip p2 commit" style="--i:5">COMMIT</span>
-      <span class="chip p1 commit" style="--i:6">mate</span>
-      <span class="chip arrow" style="--i:7">&rarr;</span>
-      <span class="chip outcome win" style="--i:8">WIN</span>
-      <span class="explain">you committed first, just in time</span>
-    </div>
-  </div>
-
   <form id="setupForm">
     <div class="row">
       <label for="p1name">LEFT</label>
@@ -315,6 +285,36 @@
     </div>
     <button class="btn" type="submit">START</button>
   </form>
+
+  <div class="howto">
+    <div class="caption">HOW IT ENDS &mdash; hover to replay</div>
+
+    <div class="scenario" title="Draw">
+      <span class="chip dots" style="--i:0">&hellip;</span>
+      <span class="chip p1" style="--i:1">check</span>
+      <span class="chip p2" style="--i:2">check</span>
+      <span class="chip p1" style="--i:3">check</span>
+      <span class="chip p1 commit" style="--i:4">COMMIT</span>
+      <span class="chip p2" style="--i:5">check</span>
+      <span class="chip p1 commit" style="--i:6">mate</span>
+      <span class="chip arrow" style="--i:7">&rarr;</span>
+      <span class="chip outcome draw" style="--i:8">DRAW</span>
+      <span class="explain">you committed, they held their nerve</span>
+    </div>
+
+    <div class="scenario" title="Win">
+      <span class="chip dots" style="--i:0">&hellip;</span>
+      <span class="chip p1" style="--i:1">check</span>
+      <span class="chip p2" style="--i:2">check</span>
+      <span class="chip p1" style="--i:3">check</span>
+      <span class="chip p1 commit" style="--i:4">COMMIT</span>
+      <span class="chip p2 commit" style="--i:5">COMMIT</span>
+      <span class="chip p1 commit" style="--i:6">mate</span>
+      <span class="chip arrow" style="--i:7">&rarr;</span>
+      <span class="chip outcome win" style="--i:8">WIN</span>
+      <span class="explain">you committed first, just in time</span>
+    </div>
+  </div>
 </div>
 
 <!-- End overlay -->
