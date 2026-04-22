@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>1D-Chess - Winning Tree (3D)</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; overflow: hidden; height: 100%; }
+  #info {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    background: rgba(0,0,0,0.75); padding: 10px 14px; border-radius: 6px;
+    max-width: 340px; font-size: 13px; line-height: 1.4;
+  }
+  #info h1 { margin: 0 0 6px; font-size: 15px; }
+  #info code { background: #222; padding: 1px 4px; border-radius: 3px; }
+  .legend div { margin-top: 2px; }
+  .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  #tooltip {
+    position: absolute; pointer-events: none; background: rgba(20,20,20,0.95);
+    padding: 8px 10px; border-radius: 6px; font-family: system-ui, sans-serif; font-size: 13px;
+    display: none; z-index: 20; border: 1px solid #333;
+  }
+  .board { display: flex; border: 2px solid #222; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+  .sq {
+    width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  }
+  .sq.light { background: #f0d9b5; }
+  .sq.dark  { background: #b58863; }
+  .sq img { width: 80%; height: 80%; object-fit: contain; }
+  .meta { color: #aaa; margin-top: 6px; font-size: 12px; text-align: center; }
+  canvas { display: block; position: absolute; top: 0; left: 0; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+</style>
+</head>
+<body>
+<div id="info">
+  <h1>1D-Chess - Full Winning Tree (3D)</h1>
+  <div>Variant: rowan441 (1&times;8, K+N+R each side).<br>
+  Start: <code>KNR..rnk</code>. White has a forced win.</div>
+  <div class="legend" style="margin-top:8px">
+    <div><span style="background:#4fc3f7"></span> White to move</div>
+    <div><span style="background:#ef5350"></span> Black to move</div>
+    <div><span style="background:#fff"></span> Checkmate - White wins</div>
+    <div><span style="background:#141414;border:1px solid #fff"></span> Checkmate - Black wins</div>
+    <div><span style="background:#ffca28"></span> Draw</div>
+  </div>
+  <div style="margin-top:8px; color:#aaa; font-size:12px;">
+    <b>A/D</b>: rotate yaw &middot; <b>W/S</b>: rotate pitch<br>
+    <b>Q/E</b> or scroll: zoom &middot; mouse drag: pan
+  </div>
+  <div id="stats" style="margin-top:6px; color:#888; font-size:12px;"></div>
+</div>
+<div id="tooltip"></div>
+<canvas id="cv"></canvas>
+
+<script>
+const DATA = {"nodes": [{"id": "KNR..rnk_w", "board": "KNR..rnk", "turn": "w", "terminal": false, "reason": "", "depth": 0}, {"id": "K.RN.rnk_b", "board": "K.RN.rnk", "turn": "b", "terminal": false, "reason": "", "depth": 1}, {"id": "K.RNnr.k_w", "board": "K.RNnr.k", "turn": "w", "terminal": false, "reason": "", "depth": 2}, {"id": "K.R.nN.k_b", "board": "K.R.nN.k", "turn": "b", "terminal": false, "reason": "", "depth": 3}, {"id": "K.R.nNk._w", "board": "K.R.nNk.", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": "K..RnNk._b", "board": "K..RnNk.", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": "K..Rnk.._w", "board": "K..Rnk..", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "KR..nk.._b", "board": "KR..nk..", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "KR..n.k._w", "board": "KR..n.k.", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "K...R.k._b", "board": "K...R.k.", "turn": "b", "terminal": true, "reason": "mate", "depth": 7}, {"id": "K..Rn.k._b", "board": "K..Rn.k.", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "K..Rn..k_w", "board": "K..Rn..k", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": "K...R..k_b", "board": "K...R..k", "turn": "b", "terminal": true, "reason": "mate", "depth": 5}, {"id": "KR..n..k_b", "board": "KR..n..k", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": "KR....nk_w", "board": "KR....nk", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "K..R..nk_b", "board": "K..R..nk", "turn": "b", "terminal": false, "reason": "", "depth": 3}, {"id": "K.R...nk_b", "board": "K.R...nk", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "K.R.n..k_w", "board": "K.R.n..k", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "K..Rn..k_b", "board": "K..Rn..k", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "K..Rn.k._w", "board": "K..Rn.k.", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "KR..n.k._b", "board": "KR..n.k.", "turn": "b", "terminal": false, "reason": "", "depth": 9}, {"id": "KR..n..k_w", "board": "KR..n..k", "turn": "w", "terminal": false, "reason": "", "depth": 10}, {"id": "KR..nk.._w", "board": "KR..nk..", "turn": "w", "terminal": false, "reason": "", "depth": 10}, {"id": "K..Rnk.._b", "board": "K..Rnk..", "turn": "b", "terminal": false, "reason": "", "depth": 11}, {"id": "KRn...k._w", "board": "KRn...k.", "turn": "w", "terminal": false, "reason": "", "depth": 10}, {"id": "K.R...k._b", "board": "K.R...k.", "turn": "b", "terminal": true, "reason": "mate", "depth": 11}, {"id": ".K.Rn.k._b", "board": ".K.Rn.k.", "turn": "b", "terminal": false, "reason": "", "depth": 9}, {"id": ".K.Rn..k_w", "board": ".K.Rn..k", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": ".K..R..k_b", "board": ".K..R..k", "turn": "b", "terminal": true, "reason": "mate", "depth": 7}, {"id": ".K.Rnk.._w", "board": ".K.Rnk..", "turn": "w", "terminal": false, "reason": "", "depth": 10}, {"id": "K..R..nk_w", "board": "K..R..nk", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "KR....nk_b", "board": "KR....nk", "turn": "b", "terminal": false, "reason": "", "depth": 9}, {"id": ".K.R..nk_b", "board": ".K.R..nk", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": "KRn....k_w", "board": "KRn....k", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "K.R....k_b", "board": "K.R....k", "turn": "b", "terminal": true, "reason": "mate", "depth": 7}, {"id": ".K.Rn..k_b", "board": ".K.Rn..k", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": ".K.Rn.k._w", "board": ".K.Rn.k.", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": ".K..R.k._b", "board": ".K..R.k.", "turn": "b", "terminal": true, "reason": "mate", "depth": 7}, {"id": ".K.R..nk_w", "board": ".K.R..nk", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": ".KR...nk_b", "board": ".KR...nk", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": ".KR.n..k_w", "board": ".KR.n..k", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "..KR..nk_b", "board": "..KR..nk", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "..KRn..k_w", "board": "..KRn..k", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "..K.R..k_b", "board": "..K.R..k", "turn": "b", "terminal": true, "reason": "mate", "depth": 9}, {"id": "KRn..k.._w", "board": "KRn..k..", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "K.R..k.._b", "board": "K.R..k..", "turn": "b", "terminal": true, "reason": "mate", "depth": 9}, {"id": ".K.Rnk.._b", "board": ".K.Rnk..", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": "K.nR.Nk._w", "board": "K.nR.Nk.", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": ".KnR.Nk._b", "board": ".KnR.Nk.", "turn": "b", "terminal": false, "reason": "", "depth": 7}, {"id": ".K.RnNk._w", "board": ".K.RnNk.", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": ".K.Rn.kN_b", "board": ".K.Rn.kN", "turn": "b", "terminal": false, "reason": "", "depth": 9}, {"id": "nK.R.Nk._w", "board": "nK.R.Nk.", "turn": "w", "terminal": false, "reason": "", "depth": 8}, {"id": "nK.R..kN_b", "board": "nK.R..kN", "turn": "b", "terminal": true, "reason": "mate", "depth": 9}, {"id": "nK..RNk._b", "board": "nK..RNk.", "turn": "b", "terminal": false, "reason": "", "depth": 9}, {"id": ".Kn.RNk._w", "board": ".Kn.RNk.", "turn": "w", "terminal": false, "reason": "", "depth": 10}, {"id": "K.Rr..nk_w", "board": "K.Rr..nk", "turn": "w", "terminal": false, "reason": "", "depth": 2}, {"id": "K.RNr.nk_w", "board": "K.RNr.nk", "turn": "w", "terminal": false, "reason": "", "depth": 2}, {"id": "KNR.r.nk_b", "board": "KNR.r.nk", "turn": "b", "terminal": false, "reason": "", "depth": 3}, {"id": "KNr...nk_w", "board": "KNr...nk", "turn": "w", "terminal": true, "reason": "stalemate", "depth": 4}, {"id": "KNRr..nk_w", "board": "KNRr..nk", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": "KN.R..nk_b", "board": "KN.R..nk", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": "KN.Rn..k_w", "board": "KN.Rn..k", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "KN..R..k_b", "board": "KN..R..k", "turn": "b", "terminal": true, "reason": "mate", "depth": 7}, {"id": "K.RN..nk_b", "board": "K.RN..nk", "turn": "b", "terminal": false, "reason": "", "depth": 5}, {"id": "K.RNn..k_w", "board": "K.RNn..k", "turn": "w", "terminal": false, "reason": "", "depth": 6}, {"id": "KR.Nr.nk_b", "board": "KR.Nr.nk", "turn": "b", "terminal": false, "reason": "", "depth": 3}, {"id": "KR.N.rnk_w", "board": "KR.N.rnk", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": "KR...Nnk_b", "board": "KR...Nnk", "turn": "b", "terminal": true, "reason": "mate", "depth": 5}, {"id": "KR.r..nk_w", "board": "KR.r..nk", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": ".KRNr.nk_b", "board": ".KRNr.nk", "turn": "b", "terminal": false, "reason": "", "depth": 3}, {"id": ".KRN.rnk_w", "board": ".KRN.rnk", "turn": "w", "terminal": false, "reason": "", "depth": 4}, {"id": ".KR..Nnk_b", "board": ".KR..Nnk", "turn": "b", "terminal": true, "reason": "mate", "depth": 5}, {"id": ".KRr..nk_w", "board": ".KRr..nk", "turn": "w", "terminal": false, "reason": "", "depth": 4}], "links": [{"source": "KNR..rnk_w", "target": "K.RN.rnk_b", "move": "1->3"}, {"source": "K.RN.rnk_b", "target": "K.RNr.nk_w", "move": "5->4"}, {"source": "K.RN.rnk_b", "target": "K.Rr..nk_w", "move": "5->3"}, {"source": "K.RN.rnk_b", "target": "K.RNnr.k_w", "move": "6->4"}, {"source": "K.RNnr.k_w", "target": "K.R.nN.k_b", "move": "3->5"}, {"source": "K.R.nN.k_b", "target": "K.R.nNk._w", "move": "7->6"}, {"source": "K.R.nNk._w", "target": "K..RnNk._b", "move": "2->3"}, {"source": "K..RnNk._b", "target": "K.nR.Nk._w", "move": "4->2"}, {"source": "K..RnNk._b", "target": "K..Rnk.._w", "move": "6->5"}, {"source": "K..Rnk.._w", "target": ".K.Rnk.._b", "move": "0->1"}, {"source": "K..Rnk.._w", "target": "KR..nk.._b", "move": "3->1"}, {"source": "KR..nk.._b", "target": "KRn..k.._w", "move": "4->2"}, {"source": "KR..nk.._b", "target": "KR..n.k._w", "move": "5->6"}, {"source": "KR..n.k._w", "target": "K..Rn.k._b", "move": "1->3"}, {"source": "KR..n.k._w", "target": "K...R.k._b", "move": "1->4"}, {"source": "K..Rn.k._b", "target": "K..Rnk.._w", "move": "6->5"}, {"source": "K..Rn.k._b", "target": "K..Rn..k_w", "move": "6->7"}, {"source": "K..Rn..k_w", "target": ".K.Rn..k_b", "move": "0->1"}, {"source": "K..Rn..k_w", "target": "KR..n..k_b", "move": "3->1"}, {"source": "K..Rn..k_w", "target": "K...R..k_b", "move": "3->4"}, {"source": "KR..n..k_b", "target": "KRn....k_w", "move": "4->2"}, {"source": "KR..n..k_b", "target": "KR....nk_w", "move": "4->6"}, {"source": "KR..n..k_b", "target": "KR..n.k._w", "move": "7->6"}, {"source": "KR....nk_w", "target": "K.R...nk_b", "move": "1->2"}, {"source": "KR....nk_w", "target": "K..R..nk_b", "move": "1->3"}, {"source": "K..R..nk_b", "target": "K..Rn..k_w", "move": "6->4"}, {"source": "K.R...nk_b", "target": "K.R.n..k_w", "move": "6->4"}, {"source": "K.R.n..k_w", "target": "KR..n..k_b", "move": "2->1"}, {"source": "K.R.n..k_w", "target": "K..Rn..k_b", "move": "2->3"}, {"source": "K.R.n..k_w", "target": "K...R..k_b", "move": "2->4"}, {"source": "K..Rn..k_b", "target": "K..R..nk_w", "move": "4->6"}, {"source": "K..Rn..k_b", "target": "K..Rn.k._w", "move": "7->6"}, {"source": "K..Rn.k._w", "target": ".K.Rn.k._b", "move": "0->1"}, {"source": "K..Rn.k._w", "target": "KR..n.k._b", "move": "3->1"}, {"source": "K..Rn.k._w", "target": "K...R.k._b", "move": "3->4"}, {"source": "KR..n.k._b", "target": "KRn...k._w", "move": "4->2"}, {"source": "KR..n.k._b", "target": "KR..nk.._w", "move": "6->5"}, {"source": "KR..n.k._b", "target": "KR..n..k_w", "move": "6->7"}, {"source": "KR..n..k_w", "target": "K..Rn..k_b", "move": "1->3"}, {"source": "KR..n..k_w", "target": "K...R..k_b", "move": "1->4"}, {"source": "KR..nk.._w", "target": "K..Rnk.._b", "move": "1->3"}, {"source": "K..Rnk.._b", "target": "K..Rn.k._w", "move": "5->6"}, {"source": "KRn...k._w", "target": "K.R...k._b", "move": "1->2"}, {"source": ".K.Rn.k._b", "target": ".K.Rnk.._w", "move": "6->5"}, {"source": ".K.Rn.k._b", "target": ".K.Rn..k_w", "move": "6->7"}, {"source": ".K.Rn..k_w", "target": "K..Rn..k_b", "move": "1->0"}, {"source": ".K.Rn..k_w", "target": ".K..R..k_b", "move": "3->4"}, {"source": ".K.Rnk.._w", "target": "K..Rnk.._b", "move": "1->0"}, {"source": "K..R..nk_w", "target": ".K.R..nk_b", "move": "0->1"}, {"source": "K..R..nk_w", "target": "K.R...nk_b", "move": "3->2"}, {"source": "K..R..nk_w", "target": "KR....nk_b", "move": "3->1"}, {"source": "KR....nk_b", "target": "KR..n..k_w", "move": "6->4"}, {"source": ".K.R..nk_b", "target": ".K.Rn..k_w", "move": "6->4"}, {"source": "KRn....k_w", "target": "K.R....k_b", "move": "1->2"}, {"source": ".K.Rn..k_b", "target": ".K.R..nk_w", "move": "4->6"}, {"source": ".K.Rn..k_b", "target": ".K.Rn.k._w", "move": "7->6"}, {"source": ".K.Rn.k._w", "target": "K..Rn.k._b", "move": "1->0"}, {"source": ".K.Rn.k._w", "target": ".K..R.k._b", "move": "3->4"}, {"source": ".K.R..nk_w", "target": "K..R..nk_b", "move": "1->0"}, {"source": ".K.R..nk_w", "target": "..KR..nk_b", "move": "1->2"}, {"source": ".K.R..nk_w", "target": ".KR...nk_b", "move": "3->2"}, {"source": ".KR...nk_b", "target": ".KR.n..k_w", "move": "6->4"}, {"source": ".KR.n..k_w", "target": ".K.Rn..k_b", "move": "2->3"}, {"source": ".KR.n..k_w", "target": ".K..R..k_b", "move": "2->4"}, {"source": "..KR..nk_b", "target": "..KRn..k_w", "move": "6->4"}, {"source": "..KRn..k_w", "target": ".K.Rn..k_b", "move": "2->1"}, {"source": "..KRn..k_w", "target": "..K.R..k_b", "move": "3->4"}, {"source": "KRn..k.._w", "target": "K.R..k.._b", "move": "1->2"}, {"source": ".K.Rnk.._b", "target": ".K.Rn.k._w", "move": "5->6"}, {"source": "K.nR.Nk._w", "target": ".KnR.Nk._b", "move": "0->1"}, {"source": ".KnR.Nk._b", "target": "nK.R.Nk._w", "move": "2->0"}, {"source": ".KnR.Nk._b", "target": ".K.RnNk._w", "move": "2->4"}, {"source": ".K.RnNk._w", "target": "K..RnNk._b", "move": "1->0"}, {"source": ".K.RnNk._w", "target": ".K.Rn.kN_b", "move": "5->7"}, {"source": ".K.Rn.kN_b", "target": ".K.Rn..k_w", "move": "6->7"}, {"source": "nK.R.Nk._w", "target": "nK..RNk._b", "move": "3->4"}, {"source": "nK.R.Nk._w", "target": "nK.R..kN_b", "move": "5->7"}, {"source": "nK..RNk._b", "target": ".Kn.RNk._w", "move": "0->2"}, {"source": ".Kn.RNk._w", "target": ".KnR.Nk._b", "move": "4->3"}, {"source": "K.Rr..nk_w", "target": "K..R..nk_b", "move": "2->3"}, {"source": "K.RNr.nk_w", "target": ".KRNr.nk_b", "move": "0->1"}, {"source": "K.RNr.nk_w", "target": "KR.Nr.nk_b", "move": "2->1"}, {"source": "K.RNr.nk_w", "target": "KNR.r.nk_b", "move": "3->1"}, {"source": "KNR.r.nk_b", "target": "KNRr..nk_w", "move": "4->3"}, {"source": "KNR.r.nk_b", "target": "KNr...nk_w", "move": "4->2"}, {"source": "KNR.r.nk_b", "target": "KNR..rnk_w", "move": "4->5"}, {"source": "KNRr..nk_w", "target": "K.RN..nk_b", "move": "1->3"}, {"source": "KNRr..nk_w", "target": "KN.R..nk_b", "move": "2->3"}, {"source": "KN.R..nk_b", "target": "KN.Rn..k_w", "move": "6->4"}, {"source": "KN.Rn..k_w", "target": "KN..R..k_b", "move": "3->4"}, {"source": "K.RN..nk_b", "target": "K.RNn..k_w", "move": "6->4"}, {"source": "K.RNn..k_w", "target": "K.R.nN.k_b", "move": "3->5"}, {"source": "KR.Nr.nk_b", "target": "KR.r..nk_w", "move": "4->3"}, {"source": "KR.Nr.nk_b", "target": "KR.N.rnk_w", "move": "4->5"}, {"source": "KR.N.rnk_w", "target": "K.RN.rnk_b", "move": "1->2"}, {"source": "KR.N.rnk_w", "target": "KR...Nnk_b", "move": "3->5"}, {"source": "KR.r..nk_w", "target": "K..R..nk_b", "move": "1->3"}, {"source": ".KRNr.nk_b", "target": ".KRr..nk_w", "move": "4->3"}, {"source": ".KRNr.nk_b", "target": ".KRN.rnk_w", "move": "4->5"}, {"source": ".KRN.rnk_w", "target": "K.RN.rnk_b", "move": "1->0"}, {"source": ".KRN.rnk_w", "target": ".KR..Nnk_b", "move": "3->5"}, {"source": ".KRr..nk_w", "target": ".K.R..nk_b", "move": "2->3"}], "root": "KNR..rnk_w"};
+const PIECES = {"wK": "data:image/png;base64,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", "wR": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAzCAYAAADo8TpyAAADaUlEQVR4nO2ZP0jzQBjGn9hYRUVxEIcq2CK2U51Eh0IHU3DRsUNXcVMcBJ10cRZRx+6KtwlO2qWgUueCtCDNEpWCUyiopeUcbENac8nla5vIR35wkPvz5p5c7u5N3hPQhizLtL2sSTAYFFh1VrZW9p30i3Q6TQFYpV/k83keO7qysmJoTwix3W+fPvP8/Gz6YCze3t642t3f3xuWy7Jsu88W4aIoAgBSqRQqlQpUVYWqqshms6Y3+fz81K71dqqqolKpIJ1OAwBGR0cN7avVKgBAkqQW+1wux+xTNCrs7+/H8PCwlh8bG9NX/3pta2tr2rXerr3s5eXF0H5/f9/Qfnx8nCm8j1mjo004k8nJScPyiYkJLvtAIMDVDmCMeDszMzNQFAXv7++m7WZnZw3LJUlCsVjEx8eHqf38/DyPHACcwoGf0bAzIu3Mzc3ZtvH7/cw6Q+HlchmPj4/4+vqy3Vk3aawJa/b29rj2Y5dSCy2Lc3l5me8JHSYUClk3Oj8/b/F0bnB7e6tpCIVCpp8RTPELCwuOir65udH6jkQiTNHMjxdCCE0mkwCAWCyG1dVVzcP1kqYzikQiKBQKTH1MB5RMJgVCCADg7u4ODw8PpttTN2iKjkajpqK5aMwxSgjp+TRBY4pks1nLec3l8gGgVqt18Pj24PEf3ML/Gp5wp/GEO40n3Gk84U7jCXcaT7jTeMKdhlt4MyD6V7BU0/xdW19fx9bWFur1ek+E+Hw+7VoQrP/aTIUrikKnpqYAALu7u0gkEh3KM2dpaQkAcH193dmNGicIFEDP/zcppVQfFmmccthHH5TJ5XKOCKeU0lgsZhlTARhxle3tbXpycqLlA4EAVFX9pwGwy9DQEMrlspYvFosIh8PcoQq3A5xaOjo6Mhx508V5eHiIcDjsaGgC+Nl6Dw4OUCgU2G3MbpBIJLC4uNh1YTycnp6a1v//ntMtWPFKUZZlSghpcek7OzsAgIuLC+ahai/x+/14fX0FAGQyGZydndFqtYparYbp6WmkUikBkiS5vnPYTfl8norNU+FoNIpgMNjtwesqV1dXAIB6vQ5xcHAQALCxsYHNzU03dVmi//j684uThTZVjo+PcXl56bIcfsSRkREAQKlUQqlUclkOHz6fD4KiKPTp6cltLdwMDAwgHo8L3+g/0cyF3R8yAAAAAElFTkSuQmCC", "wB": "data:image/png;base64,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", "wN": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAELklEQVR4nM1ZK3DCShQ9ffNmKjq4zlRQhapCgUMicHgMGoWsiEQhopAxKKaDjCwKh+wMCoWJRGViqs4T3bu9y+ObbChnZkUg2ezZvffcT4ArMR6P2ev1GMcxz90HgAD49fV18t6bwyzejvf394MLHAwGzn1vb2/3RWQ+nxMAq9WqXeRkMnEWaa71fzLuB7PZjAA4HA4ppABwvV4TAJIksb9Np1OSvE/zEtOq1+skyX6/TwCsVCrsdrus1WoEwG63S0Gz2SQA9no9RlHE5XJ5N4QIgKvVytlxPbbbrSXS7XYP3gOAQRBwtVr9DbFWq+WYzna7ZRzHdghBwW6343w+ZxiG7Pf7fHl5OUhq39dKhfYBvevXIk1TLhYLDofD/xGKoqh8QmIm7XY7N4lDiOPYUcJqtcrNZlMOoel06uU0TkErIQC59gfjkNaWZRejKPJOJssyRyDCMPRKhgDY7/dJ0rHt2WzmnQxJjkYjv0KgcyaSXCwWzvGLepUBcxoEwM/Pz8Jk7EQkHacEwCRJSiNCUvI5+65cDHq9HgGw1WqRJLX8AuBgMCiVhEBiV71ev56IyY0IgJvNhuRPcJPfKpXKTUjsv9eo5+Uw7DkcDp1Jl8slJ5MJsyy7ekHT6ZTVapW73S7Xs8oaLoOuO9I0vfqlx9ButwmAcRzner5SqVwtyU7M8AWZdz8fuxR7hd1pmFzHyq0vmPS98LwyxyVR397oE2IW4/G40DxSdTYajeNEJAD5ViQpwKAUMC+0gp2KK07w8wGdGcCUvEUhonEw5ZcX1mo1D8v/wV7zgTD1fVGIFJtAWe5p6JPQOZOPEmC73R5WL2Hoyzd0dizOLde+4pLM5zQznp+fnZRc6u9rkWWZzYu0DZtqz6ukSxPQBkfTk7IvCYLAXo9Go4sn1vMAkHQfwG9jz2eJLD02U4T9BkApmqQ3BYDNZvOiSfed2tiwhchvGIbeiOikFsBvizMIApJuGnDO8Xe7nWNKJu0/KiQ+pFeQZdlhIjrLTdP0rFPqlEP86xADnbX6ht4gm+k2Go2Ti9WJnu52NBqNc5WbIyQ+0el0fvMuXfXt1wlyo/YhTc4ox1FoGS4DUgZb5ZJGc6fTcQomTWQ2mzFN04tJmGZBobT9HLRbAHB1/tggKR9sztbOWopFRMqAuIWVYHm5ll492u22TdRwpqjRm9LpdEojQf6auVm3iyRJuF6vbZd9n9SpDzb6JC6NQUWwF4RPI4oiDgaDs3WyDlDSPiobR5PHvNDm5LtTfwpafLwQ+QsS5IHoXgTS//JZkN2ciO645Gm6+YAXIjJJWZ8WbkJES/NfQtbwT14iHx8fAIAwDHNvxr3Ae41R5EQeChJBlmV4enrysTG58PDwQ+HfPA8nScLX11cAQBAE/lZ1a+x/ubqHkdu0lsslv7+/8z7uFY+Pj/gP9MKIaX9U2+0AAAAASUVORK5CYII=", "wP": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAzCAYAAAD/06q7AAADc0lEQVR4nMWYv0vrUBSAvxZ1qVFBt+qgCFaFuuhWcCmCU3GtQ/8ExwqOTh2cOnbp1MFREKR1EREqLhVF2qkoGbNoI/hjOG94SV5amzaJyesHhZTc3vs15+bcc2+EgFBVVb6/vxkfH2d+fj4SVL+eKRQKAvz4HB0dyX8VabVafUV6P/V6PXyxdrvdNWipVBJVVUVERNM0qVQqXfcbjUa4UolEQgBRFEXe3t6kH7quSzKZtIuFw9XVlTVIu93uK2OiaZrV9vT0NBypg4MDASSbzQ6UMcnn8wJIJpMJRyiVSgkg5XLZlVC1WvUUtqhXoc/PTwAmJiZctY9EvKUkz0Jra2sA3N/fu2rfbDYBSKVSXodyhzE5BXAVMkVRBJBisRhOyDY2Nqzr/f39gW0PDw/pdDoAJJNJV/17Emo0GrKysmJ9X1hYGNh+cnLSut7e3qZWqwX3pvVm51ar5SpkqqqKmUgJMmvPzc1Z2VnXdVcydgLN2qVSyerMXLO8ouu61cfx8fGvpQSQQqHgS8akZ9H1h1E+COC4kHrB7Ovs7Kyv1NC37O7uDoCtrS0URfH9x0xyuRwANzc3fe8PFXp6egJgZ2fn1zIAm5ubgHOmHyr0+voKwNTUVCBCs7OzAGia5k9oenoagK+vr0CE3t/fAZiZmfEntLy8DDjH3CuPj48ArK+v++vAXiEGAQFVkJ6KMie8FmuOGJlVAF/LRu/TyeVygaxnAkg6nfYlk81mg92BGKu0Lym7jBE2R8bcCl1fX1vXl5eXRCIRVFUlHo87/qbT6fzIX7e3t26HdMZez9CzUx2GpmlSLpclHo939WHUV97oLcqKxaKf6WPxqy22qqq+KsRhqKpqFf5epawfaZoWiIyJruu9IRxMOp3+dYXoRsocY2lpyVnKHud6vR6KjIn9jMk4+HIOVT6fD1XGxNhAWtHoMjGO4QJbSN1izicjgf58OpVK5b8K2SsKy8T+6EaBMbH/CZm54eTkZCRCtkOM7hPVsF7zYZhpIApQrVYBSCQSAxfLMInFYmQymb819fn5OTD8eCVs9vb2rGsBpFarjSRcJg8PDxK1J6PV1dVRPBiLxcVFovYN26jmj0ksFiP68vIyUoleorquAyGeknpkzNzaNptNdnd3R6wDYx8fH8Dfzf/FxcWIdSDSarXk+fl51B4WfwBiu4Tr5NWczgAAAABJRU5ErkJggg==", "bK": "data:image/png;base64,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", "bR": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAzCAYAAADo8TpyAAACkElEQVR4nO2avWoyQRSG31VRCzGgnWJhpRY2BrtAGgsrI4KNFl6AhRdgI1pZWFhbp7HTpFJbKy2EDYkLwjaCNxDiD8JJ8SXiJvtr8s0a2Qem2LMze96ZnZmzM7McviCKIn21fRIOhzmle1pltcr/xC86nQ4B0Erf4HleTzlKp9Oy5bvdrmG/tuOLxWKhWjElVquVrnzj8VjWLoqiYZ8S4Q6Hw/ADAGCz2ejK5/V6Ze273e4kvweq1aquV25SkmD7avgrWMJZIxG+3+/N0mEYiXCfzwciOrvU7/exXC4lA1Qy/yUSCTw8PODq6opFo+nm5eUFmUxGPXoOh0Ozpz1d0VaWj9diemo2m/pFH5NMJqnRaBBLXl9fCQD1+31V0er9BsDd3R2Vy+WTKn4KgiDA7/ejUChoalMlGAwy7yKDwUCzi2gGIJfLpb+WDLmMyPmXsISzxhLOGks4ayzhrLGEs8YSzprLFb7dblnoMIzm9mwsFkOtVjvZwWazgdvtllwDkNiOeXp6OtnXAVEUqdVqMV0sExGVSiXNpZvqgjSVStFoNEI0Gv15K+hkPp8DAHieRzweV9SneGMwGFC9Xkc8Hv8P8rSZTCaYTqfGVvqVSoUAMO8ix3zsq5AgCLLdRnZwttttAEA2m0UgEDDWVL+A0+nE/f09AODx8VE2j+qs0uv1fl/VL3G5AehcOXvhTqdT1s6Jokjdbvdwxvn29oZIJIJ8Ps9SnyLFYhHX19cA/h31hEIhFAoFjvsMMsdUKhXkcjnFg1MiAsf9bDNVz3PW6zUymcw3O8/zwM3Njekb+EbTbDYjm9LHzrlz9oNTCZveHwjODZvH4zFbg2Hsdju45XJJz8/PZmvRjcvlwu3tLfcO6ixei5Ic3UwAAAAASUVORK5CYII=", "bB": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADYAAAA2CAYAAACMRWrdAAAD9UlEQVR4nNVaPUjrUBT+3lOuFVvsoDjoUhSMKE7t1kVooVtwbJZODgXFsUNH6VDBqUOHOjgVrIPUsQ4SHKy4KEFsF4OIPyAOQkUNyH2DTWif2ubeNGn7wQfR9txzvp6bk5OTADZDlmUaDAYpAAqABgIBWiqVqN1+bcXGxoYh6H8mEon+FCfL8q+idPZl5kKhUFthgUDANmF/7FoYX8F3LYa/dizaC7BNmCRJbb8TiUTscm8fFEVpe46dn5/3X/EAgHw+/6uoXC7Xn6LqgbdkX4krl8vU4/G0FdXIcrnc2wKTySSToEaur6/3prjGfpCXi4uLvSVucnLSsiid9W3cfQiC0DFROus/VPcgSZLpYEulEjXTGOsURbE74g4ODkwH6ff7qQ4zzbHOQqHQFXFcwiKRCOvW5AJXr8h6YX14eDCOn5+fmXxlMhlHs9b2ly6Xy5RSSmu1Gq3VakbGGv+u94q2ZY0J1WrVVDBmYWYtnmZ5kNXg5OTE1PfC4TDC4TA0TYPX68Xq6ioAYHt7G4+PjyCE4OjoyNRax8fHrGGyo976MFEQBCNDPB1KPB5nzhhz8Xh6emI1gcfjMY7dbjez/f39PbONI6OBs7Mz41hRFCdcsp9j4+PjXI6mp6dBCMHd3R2zrdfrZbZhztjCwgKzEwC4vr5GpVLhsvX7/Vx2TDBb7jtJx2YjdnT0v3FiYsK5zoOlS7fKw8ND54QBfNczVsZiMW5RlsbLkiTRfD4PAEgkEohGo3h/f+day+VyYW9vD6lUCgAgiiKKxaKdI/jW0GeHjY2uFQCgOzs7lrcf83Xsf1xeXgIAkskkotEoPj4+uNYZGhrC/v4+AODq6spqWNbAchfNSqt3z1b3sN0Vizs+7l6xni1bYSVr3OfYzc0NCoUCr7kp3N7e2rp+X4J7D0uSRFOpFDRN62Q8Bggh2NzcRDab5YrRSvFwqtXhipG7eAiCwGtqGmNjY7b7+AYnGuGuvQeiqirTyNosg8Egrd/3dReqqtKtrS39+RYXBUGg6XS6NwT9BFmWKcstTTwe15/CdBQ/VhxFUaiiKLi4uEClUkG1WuWeV3QagiBgdnYWgiBgbm4OoVAIU1NTrSunmSf9vUhRFKmqqj9n3e/3dz1Aq0yn083inBzOOJE9ANZeYehVJhIJOjg/Pw+7IYoilpeXQQjB7u4uisWirf5mZma+qmIul6MrKytNH8ZiMSwtLcHn82F0dBTDw8MghBifa5oGTdPw+fn5bYAzMjICt9sNn8/XslqpqkprtRpeX1+b/u9yuTAwMABCyDefb29veHl5gaqqOD09RTabbbLNZDJYW1tr9lutVnv3AtkCqqrS+tt2Bv4BQ9CxcvTNLxIAAAAASUVORK5CYII=", "bN": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAEIUlEQVR4nN1aP0z6ThT/QH4SEsMk0UEXjYksVmNgY9OBrXsXJwcmBgcGRiYGJibTQV2I6cgoExuDMUQmEpMOEhedDAP+Sd53sFfuSgu0vQr5fZJPUgvce5/ee+/eXQV8olarkaZp1Gq1aN73ABAA6vV6M7/757Cct1kul10dLBaLwvcymcxqCTEMQ3AQADUaDcFJ6283rg6azaark/1+nwBgOBx6iVit8HKGFmMqlSJVVWlvb89TiKZppOs6dTqdlRHk6axflkolacLifn+Qz+dDGdze3gYRYTgc4vT0FFdXVwBA9Xr972ZqVg4sykajQU6MRiPSdd21eEQCVVVDC8lkMlSv18k0zSlBRESlUokA0GAwiEbQzc2NtNxgzGaz1G63p8RYeUNWuZeHbrfrGiJu60oQKopCg8FAEMPCWHbuTK0JDDJnStd1Qcz7+7u8vOF7JgBUq9UEY7JmhbFcLgvjW7lC9/f3ocUIhkajkWBIRgFwslKpCDZYR2GFm39omiYYUFVVMGC1JpHQMAzBVqFQCNZ8Wr2RwLOzM2HwdDodmRBYM+DMFysnF4eiKK6DV6tVarVatLW1FakI4Lc88+DydTF4NYfLYKvVsoWMRiMC/JXkpQvgyaNarS42K6znWSU2m01bCFsoF1n1l+64k6lUyl8Fs2JvJdntdm0hLIdnrStLd9iLxWJxKumtNBDhbEVWkc7wyufzrjMSmQOyQpYPL64oTRDFXoORNZmyHggDayaFPb+z1Wg0GlKeIothZjQsnS0SN9uAs/Hjp6/dbgc2av0WgPvBXlDyyOfzVCgUfu04F0C+TWeNml+apjmZbgDn5+fShPB7/Uqlwu4jPh6PeZu4vr62r29vb+EHmqYBQGx3dzfG3/c7ziw8Pz/b10dHR5MP3M5qs9kseXW/XrQ2P1OQXUj47TDbavR6PQrd6Waz2Xk7N6lC+N0jC33DMCh+cnIyw4fZKBaLeHh4iO3s7MTcPrfOqKTCNE37emNjAwDw8vLyeyOXy/l+MtY7EE9YhwXSqSjKVAm2H5jfOm/ljyei3MsDYgnO5XKTEsyMz3ot4KAnZC1+iwrRNI2dHYgYDofU7/fJNE1yKwSzXthEPROM/FrHzor/czrjTFxd1+nx8RH7+/u4vLyMHR8fu4ro9Xp0eHjopTEypNNpeYP9RTjx/Pj4sGeE9YS+X/S44eDgQMYwC+Pr68u+TiQSAAK8sXJiXgWLAnxblUwmAYQUous6PT09hfMqJNbW1gCEFHJxcSHFGRkILGTev3BECRZOPAILubu7C+VMGLAEB4Dv728AIYQ0m83wHgVEPD5xmyW+lPK7TLBSHEhI4DdHkrC+vm5f//z8APgfzMjr6ysAwHVDtAg6nQ59fn5Kc8gPNjc3MR6PkUwm8fb2hkQigX/yjZGKCQlT4wAAAABJRU5ErkJggg==", "bP": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAzCAYAAAD/06q7AAACLklEQVR4nNWYMYvCMBTH/xYcRQdHJ3EQBV3c7OjmBxBc/CCOnZwdnXVwcBBcdBIRFJe6CJ1EyegiKCgOvaXK1UtM0kubuz+85bVJfrwkLy+JQZEIIe7j8UA8Hkcmk4mp6ldanU7HBfDD2u22GymI4zhUkHdbrVbhg+33eyGYp9m2HS5UPp+XAvIsHM3n8yAw7nA4FIIyZIFGo5FsEwBAv98P1I4r0zQDRQiC0yYdofv9LttEStJAhUIh0ECmaQr9Jw1Ur9elYQCg0WgI/ScNVC6XpWEAoFQqBWr3UV6CC2yz2UxdPpLNzixTlrXT6bQSIKjI2r1eTyWMa1kWE0q0bgnjLKKOzd1lYZUP4/GY2i8XaLPZqKcBsFwuqX4u0G63Uw4DANvtlurnAp3PZ+UwAHA6nah+LlAymVQOAwCpVIrq5wLlcjnVLACAYrFI9XOBKpWKchgAqFarVP//y0MAYFmWUpJWq8X8JnPDVBkl5rjC9ZBt20pIptPpx+/CQIvF4tcwALBer3/fScCL4Ufz6is5qSrKWCZVrBFCQoVhQX3aZaGUHQy9OKiLularRQmDbDbLHm8wGEQyVe/mPXxRpyzS6HwXIcTv8J7htFmz2XTfI6QtOk+9FnW329UO41MikdA6Xd9M/EU1CjMA/gkcpQwAmEwmujleeu6yP7OgDe8Q/TMyWBc2XTKOx6NuBp+My+Wim8En43q96mbwybjdbroZfIo5juMeDgfdHC99AfT7+4yUvLydAAAAAElFTkSuQmCC"};
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+document.getElementById('stats').textContent = DATA.nodes.length + ' nodes / ' + DATA.links.length + ' edges';
+
+let W = cv.width = window.innerWidth;
+let H = cv.height = window.innerHeight;
+
+const nodeMap = {};
+DATA.nodes.forEach((n, i) => {
+  n.idx = i;
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2 * Math.random() - 1);
+  const r = 40 + (n.depth >= 0 ? n.depth : 0) * 32 + Math.random() * 20;
+  n.x = r * Math.sin(phi) * Math.cos(theta);
+  n.y = r * Math.sin(phi) * Math.sin(theta);
+  n.z = r * Math.cos(phi);
+  n.vx = n.vy = n.vz = 0;
+  nodeMap[n.id] = n;
+});
+DATA.links.forEach(l => { l.s = nodeMap[l.source]; l.t = nodeMap[l.target]; });
+
+const root = nodeMap[DATA.root];
+root.fx = 0; root.fy = 0; root.fz = 0;
+
+function step() {
+  const nodes = DATA.nodes, links = DATA.links;
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i];
+    for (let j = i+1; j < nodes.length; j++) {
+      const b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      let d2 = dx*dx + dy*dy + dz*dz + 0.01;
+      let d = Math.sqrt(d2);
+      let f = 2500 / d2;
+      let fx = f * dx/d, fy = f * dy/d, fz = f * dz/d;
+      a.vx -= fx; a.vy -= fy; a.vz -= fz;
+      b.vx += fx; b.vy += fy; b.vz += fz;
+    }
+  }
+  const L = 55;
+  for (const l of links) {
+    let dx = l.t.x - l.s.x, dy = l.t.y - l.s.y, dz = l.t.z - l.s.z;
+    let d = Math.sqrt(dx*dx + dy*dy + dz*dz) + 0.01;
+    let f = (d - L) * 0.04;
+    let fx = f * dx/d, fy = f * dy/d, fz = f * dz/d;
+    l.s.vx += fx; l.s.vy += fy; l.s.vz += fz;
+    l.t.vx -= fx; l.t.vy -= fy; l.t.vz -= fz;
+  }
+  for (const n of nodes) {
+    n.vx += -n.x * 0.002;
+    n.vy += -n.y * 0.002;
+    n.vz += -n.z * 0.002;
+  }
+  for (const n of nodes) {
+    if (n.fx !== undefined) { n.x = n.fx; n.y = n.fy; n.z = n.fz; n.vx = n.vy = n.vz = 0; continue; }
+    n.vx *= 0.85; n.vy *= 0.85; n.vz *= 0.85;
+    n.x += n.vx; n.y += n.vy; n.z += n.vz;
+  }
+}
+
+let yaw = 0.6, pitch = -0.3, zoom = 1, panX = 0, panY = 0;
+const FOCAL = 650;
+
+function project(n) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  let x1 = n.x * cy - n.z * sy;
+  let z1 = n.x * sy + n.z * cy;
+  let y1 = n.y;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  let y2 = y1 * cp - z1 * sp;
+  let z2 = y1 * sp + z1 * cp;
+  let x2 = x1;
+  const persp = FOCAL / (FOCAL + z2);
+  return {
+    sx: W/2 + panX + x2 * persp * zoom,
+    sy: H/2 + panY + y2 * persp * zoom,
+    depth: z2,
+    persp: persp
+  };
+}
+
+function colorFor(n, persp) {
+  let base;
+  if (n.terminal) {
+    if (n.reason === 'mate') {
+      // turn = side-to-move who is mated. mate on white's turn => Black wins.
+      base = n.turn === 'w' ? [20,20,20] : [255,255,255];
+    } else {
+      base = [255,202,40]; // draw
+    }
+  } else {
+    base = n.turn === 'w' ? [79,195,247] : [239,83,80];
+  }
+  const t = Math.max(0.4, Math.min(1.2, persp));
+  return 'rgb(' + Math.floor(base[0]*t) + ',' + Math.floor(base[1]*t) + ',' + Math.floor(base[2]*t) + ')';
+}
+function strokeFor(n) {
+  if (n.id === DATA.root) return { color: '#fff', width: 2 };
+  if (n.terminal && n.reason === 'mate' && n.turn === 'w') return { color: '#fff', width: 1.5 };
+  return null;
+}
+function radiusFor(n) {
+  if (n.id === DATA.root) return 9;
+  if (n.terminal) return 5;
+  return 3.5;
+}
+
+function draw() {
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+
+  const proj = DATA.nodes.map(project);
+
+  const linkOrder = DATA.links.map((l, i) => {
+    const a = proj[l.s.idx], b = proj[l.t.idx];
+    return { i: i, z: (a.depth + b.depth) / 2 };
+  }).sort((a,b) => b.z - a.z);
+
+  ctx.lineWidth = 1;
+  for (const o of linkOrder) {
+    const l = DATA.links[o.i];
+    const a = proj[l.s.idx], b = proj[l.t.idx];
+    const avgP = (a.persp + b.persp) / 2;
+    const alpha = Math.max(0.08, Math.min(0.5, 0.25 * avgP));
+    ctx.strokeStyle = 'rgba(200,200,200,' + alpha.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.stroke();
+  }
+
+  const nodeOrder = DATA.nodes.map((n, i) => ({ n: n, i: i, z: proj[i].depth }))
+    .sort((a, b) => b.z - a.z);
+  for (const o of nodeOrder) {
+    const n = o.n, p = proj[o.i];
+    ctx.beginPath();
+    ctx.arc(p.sx, p.sy, radiusFor(n) * p.persp * Math.sqrt(zoom), 0, Math.PI * 2);
+    ctx.fillStyle = colorFor(n, p.persp);
+    ctx.fill();
+    const stroke = strokeFor(n);
+    if (stroke) {
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
+      ctx.stroke();
+    }
+  }
+  window._proj = proj;
+}
+
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+
+let iterations = 0;
+function loop() {
+  if (iterations < 800) { step(); iterations++; }
+  const rot = 0.025;
+  if (keys['a'] || keys['arrowleft'])  yaw   -= rot;
+  if (keys['d'] || keys['arrowright']) yaw   += rot;
+  if (keys['w'] || keys['arrowup'])    pitch -= rot;
+  if (keys['s'] || keys['arrowdown'])  pitch += rot;
+  pitch = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, pitch));
+  if (keys['q']) zoom = Math.max(0.2, zoom * 0.98);
+  if (keys['e']) zoom = Math.min(8, zoom * 1.02);
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+let dragging = false, lastX, lastY;
+cv.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mouseup', () => dragging = false);
+cv.addEventListener('mousemove', e => {
+  if (dragging) {
+    panX += (e.clientX - lastX);
+    panY += (e.clientY - lastY);
+    lastX = e.clientX; lastY = e.clientY;
+  }
+  const proj = window._proj;
+  if (!proj) return;
+  let found = null, bestD = 14;
+  for (let i = 0; i < DATA.nodes.length; i++) {
+    const p = proj[i];
+    const d = Math.hypot(p.sx - e.clientX, p.sy - e.clientY);
+    if (d < bestD) { bestD = d; found = DATA.nodes[i]; }
+  }
+  if (found) {
+    const squares = found.board.split('').map((c, i) => {
+      const sqCls = (i % 2 === 0) ? 'light' : 'dark';
+      let inner = '';
+      if (c !== '.') {
+        const isWhite = c === c.toUpperCase();
+        const key = (isWhite ? 'w' : 'b') + c.toUpperCase();
+        inner = '<img src="' + PIECES[key] + '" alt="' + c + '">';
+      }
+      return '<div class="sq ' + sqCls + '">' + inner + '</div>';
+    }).join('');
+    const boardStr = '<div class="board">' + squares + '</div>';
+    const turn = found.turn === 'w' ? 'White to move' : 'Black to move';
+    const extra = found.terminal ? ' - ' + found.reason : '';
+    tooltip.innerHTML = boardStr +
+      '<div class="meta">' + turn + extra + ' &middot; depth ' + found.depth + '</div>';
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top  = (e.clientY + 14) + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.15 : 1/1.15;
+  zoom = Math.max(0.2, Math.min(8, zoom * factor));
+}, { passive: false });
+
+window.addEventListener('resize', () => {
+  W = cv.width = window.innerWidth;
+  H = cv.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
