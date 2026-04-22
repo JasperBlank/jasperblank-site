@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mind Chess</title>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --fg: #ececec;
+    --dim: #6a6a70;
+    --panel: #16161a;
+    --border: #24242a;
+    --accent: #d4af37;
+    --good: #2ecc71;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: Georgia, "Times New Roman", serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; user-select: none; }
+
+  .turn-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 1rem; padding: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--dim); letter-spacing: 0.25em; font-size: 0.85rem;
+  }
+  .turn-bar .num { color: var(--fg); font-family: ui-monospace, monospace; font-size: 1rem; }
+
+  main { flex: 1; display: flex; position: relative; }
+
+  .side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: background 0.35s ease, opacity 0.35s ease;
+    position: relative;
+  }
+  .side.active { background: var(--panel); }
+  .side.inactive { opacity: 0.35; }
+
+  .name {
+    font-size: 2rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 2rem;
+    min-height: 2.5rem;
+  }
+
+  .keys { display: flex; gap: 1.25rem; color: var(--dim); font-size: 0.9rem; letter-spacing: 0.15em; }
+  .keys .k { display: flex; align-items: center; gap: 0.5rem; }
+  .keys kbd {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 0.2rem 0.55rem;
+    color: var(--fg);
+    min-width: 1.5em;
+    text-align: center;
+    transition: none;
+  }
+
+  /* The pulse is identical for Check and Commit — invisible which was pressed. */
+  .side.flash { animation: flash 0.25s ease-out; }
+  @keyframes flash {
+    0% { background: var(--panel); }
+    40% { background: #2a2a32; }
+    100% { background: var(--panel); }
+  }
+
+  .arrow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 3rem;
+    color: var(--dim);
+    pointer-events: none;
+    transition: transform 0.35s ease, opacity 0.2s ease;
+  }
+  .arrow.left { transform: translate(-50%, -50%) rotate(180deg); }
+  .arrow.hidden { opacity: 0; }
+
+  .reveal-wrap {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .reveal-wrap.show { display: flex; }
+  .reveal-btn {
+    pointer-events: auto;
+    font-family: inherit;
+    font-size: 1.8rem;
+    letter-spacing: 0.3em;
+    padding: 1.5rem 3rem;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .reveal-btn:hover { background: var(--accent); color: var(--bg); animation: none; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
+    50%      { box-shadow: 0 0 0 18px rgba(212, 175, 55, 0); }
+  }
+
+  /* Overlays */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10, 10, 12, 0.96);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 20;
+    padding: 2rem;
+    text-align: center;
+  }
+  .overlay.show { display: flex; }
+  .overlay h1 { font-weight: normal; letter-spacing: 0.25em; font-size: 2.2rem; margin: 0 0 0.4rem; }
+  .overlay h2 { font-weight: normal; letter-spacing: 0.2em; font-size: 2.8rem; margin: 0 0 0.6rem; }
+  .overlay h2.win { color: var(--good); }
+  .overlay h2.draw { color: var(--accent); }
+  .overlay p { color: var(--dim); max-width: 32rem; line-height: 1.6; font-style: italic; }
+  .overlay .tag { color: var(--dim); letter-spacing: 0.3em; font-size: 0.85rem; margin-bottom: 1rem; }
+
+  .setup form { display: flex; flex-direction: column; gap: 1rem; width: min(26rem, 90%); }
+  .setup .row { display: flex; align-items: center; gap: 1rem; }
+  .setup label { flex: 0 0 5rem; color: var(--dim); letter-spacing: 0.15em; font-size: 0.9rem; text-align: right; }
+  .setup input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 1.1rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 2px;
+    outline: none;
+  }
+  .setup input:focus { border-color: var(--accent); }
+
+  .btn {
+    font-family: inherit;
+    font-size: 1rem;
+    letter-spacing: 0.2em;
+    padding: 0.8rem 1.8rem;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--fg);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 1.5rem;
+  }
+  .btn:hover { background: var(--fg); color: var(--bg); }
+</style>
+</head>
+<body>
+
+<div class="turn-bar">
+  <span>TURN</span>
+  <span class="num" id="turnNum">0</span>
+</div>
+
+<main>
+  <section class="side" id="side1">
+    <div class="name" id="name1">Player 1</div>
+    <div class="keys">
+      <div class="k"><kbd>A</kbd><span>Check</span></div>
+      <div class="k"><kbd>Z</kbd><span>Commit</span></div>
+    </div>
+  </section>
+  <section class="side" id="side2">
+    <div class="name" id="name2">Player 2</div>
+    <div class="keys">
+      <div class="k"><kbd>K</kbd><span>Check</span></div>
+      <div class="k"><kbd>M</kbd><span>Commit</span></div>
+    </div>
+  </section>
+
+  <div class="arrow hidden" id="arrow">&#10140;</div>
+
+  <div class="reveal-wrap" id="revealWrap">
+    <button class="reveal-btn" id="revealBtn">REVEAL</button>
+  </div>
+</main>
+
+<!-- Setup overlay -->
+<div class="overlay setup show" id="setupOverlay">
+  <h1>MIND CHESS</h1>
+  <p>Check. Check. Check. &mdash; Checkmate.</p>
+  <form id="setupForm">
+    <div class="row">
+      <label for="p1name">LINKS</label>
+      <input id="p1name" type="text" maxlength="20" placeholder="Naam speler links" autocomplete="off">
+    </div>
+    <div class="row">
+      <label for="p2name">RECHTS</label>
+      <input id="p2name" type="text" maxlength="20" placeholder="Naam speler rechts" autocomplete="off">
+    </div>
+    <button class="btn" type="submit">BEGIN</button>
+  </form>
+</div>
+
+<!-- End overlay -->
+<div class="overlay" id="endOverlay">
+  <div class="tag" id="endTag"></div>
+  <h2 id="endTitle"></h2>
+  <p id="endReason"></p>
+  <button class="btn" id="restartBtn">OPNIEUW</button>
+</div>
+
+<script>
+(() => {
+  const state = {
+    names: { 1: 'Player 1', 2: 'Player 2' },
+    turn: 1,
+    count: 0,
+    committed: { 1: false, 2: false },
+    firstCommitter: null,
+    phase: 'setup', // setup | play | reveal | end
+  };
+
+  const els = {
+    side1: document.getElementById('side1'),
+    side2: document.getElementById('side2'),
+    name1: document.getElementById('name1'),
+    name2: document.getElementById('name2'),
+    turnNum: document.getElementById('turnNum'),
+    arrow: document.getElementById('arrow'),
+    revealWrap: document.getElementById('revealWrap'),
+    revealBtn: document.getElementById('revealBtn'),
+    setupOverlay: document.getElementById('setupOverlay'),
+    setupForm: document.getElementById('setupForm'),
+    p1name: document.getElementById('p1name'),
+    p2name: document.getElementById('p2name'),
+    endOverlay: document.getElementById('endOverlay'),
+    endTag: document.getElementById('endTag'),
+    endTitle: document.getElementById('endTitle'),
+    endReason: document.getElementById('endReason'),
+    restartBtn: document.getElementById('restartBtn'),
+  };
+
+  const KEYMAP = {
+    'a': { player: 1, action: 'check' },
+    'z': { player: 1, action: 'commit' },
+    'k': { player: 2, action: 'check' },
+    'm': { player: 2, action: 'commit' },
+  };
+
+  function render() {
+    els.name1.textContent = state.names[1];
+    els.name2.textContent = state.names[2];
+    els.turnNum.textContent = state.count;
+
+    const active = state.turn;
+    els.side1.classList.toggle('active', state.phase !== 'setup' && active === 1);
+    els.side1.classList.toggle('inactive', state.phase !== 'setup' && active !== 1);
+    els.side2.classList.toggle('active', state.phase !== 'setup' && active === 2);
+    els.side2.classList.toggle('inactive', state.phase !== 'setup' && active !== 2);
+
+    if (state.phase === 'play') {
+      els.arrow.classList.remove('hidden');
+      els.arrow.classList.toggle('left', active === 1);
+    } else {
+      els.arrow.classList.add('hidden');
+    }
+
+    els.revealWrap.classList.toggle('show', state.phase === 'reveal');
+  }
+
+  function flashSide(player) {
+    const el = player === 1 ? els.side1 : els.side2;
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  }
+
+  function act(player, action) {
+    if (state.phase !== 'play') return;
+    if (player !== state.turn) return;
+
+    const opp = player === 1 ? 2 : 1;
+    state.count += 1;
+
+    if (action === 'commit') {
+      state.committed[player] = true;
+      if (state.firstCommitter === null) state.firstCommitter = player;
+    }
+
+    flashSide(player);
+    state.turn = opp;
+
+    // If the player whose turn it now becomes has committed previously,
+    // that player's next action is a Reveal, not a keyboard move.
+    if (state.committed[state.turn]) {
+      state.phase = 'reveal';
+    }
+
+    render();
+  }
+
+  function doReveal() {
+    if (state.phase !== 'reveal') return;
+    const revealer = state.turn;
+    const opp = revealer === 1 ? 2 : 1;
+    state.count += 1;
+
+    if (state.committed[opp]) {
+      // Both committed. Whoever committed FIRST wins.
+      const winner = state.firstCommitter;
+      endGame('win', winner);
+    } else {
+      // Only the revealer committed — forced mate with no setup -> draw.
+      endGame('draw', null);
+    }
+  }
+
+  function endGame(kind, winner) {
+    state.phase = 'end';
+    if (kind === 'win') {
+      els.endTag.textContent = 'CHECKMATE';
+      els.endTitle.textContent = `${state.names[winner].toUpperCase()} WINT`;
+      els.endTitle.className = 'win';
+      els.endReason.textContent = `${state.names[winner]} committeerde als eerste, en onthulde op tijd.`;
+    } else {
+      els.endTag.textContent = 'CHECKMATE';
+      els.endTitle.textContent = 'GELIJKSPEL';
+      els.endTitle.className = 'draw';
+      const revealer = state.turn;
+      const opp = revealer === 1 ? 2 : 1;
+      els.endReason.textContent = `${state.names[revealer]} was gecommitteerd, maar ${state.names[opp]} niet. Niemand komt als winnaar uit de bus.`;
+    }
+    els.endOverlay.classList.add('show');
+    render();
+  }
+
+  function startGame(n1, n2) {
+    state.names = { 1: n1 || 'Speler 1', 2: n2 || 'Speler 2' };
+    state.turn = Math.random() < 0.5 ? 1 : 2;
+    state.count = 0;
+    state.committed = { 1: false, 2: false };
+    state.firstCommitter = null;
+    state.phase = 'play';
+    els.setupOverlay.classList.remove('show');
+    els.endOverlay.classList.remove('show');
+    render();
+  }
+
+  function resetToSetup() {
+    state.phase = 'setup';
+    els.endOverlay.classList.remove('show');
+    els.setupOverlay.classList.add('show');
+    els.p1name.value = state.names[1] === 'Speler 1' ? '' : state.names[1];
+    els.p2name.value = state.names[2] === 'Speler 2' ? '' : state.names[2];
+    render();
+    setTimeout(() => els.p1name.focus(), 10);
+  }
+
+  // Inputs
+  document.addEventListener('keydown', (e) => {
+    if (state.phase !== 'play') return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    const map = KEYMAP[e.key.toLowerCase()];
+    if (!map) return;
+    e.preventDefault();
+    act(map.player, map.action);
+  });
+
+  els.revealBtn.addEventListener('click', doReveal);
+  els.setupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    startGame(els.p1name.value.trim(), els.p2name.value.trim());
+  });
+  els.restartBtn.addEventListener('click', resetToSetup);
+
+  render();
+  setTimeout(() => els.p1name.focus(), 50);
+})();
+</script>
+</body>
+</html>
