@@ -134,6 +134,79 @@
   .overlay p { color: var(--dim); max-width: 32rem; line-height: 1.6; font-style: italic; }
   .overlay .tag { color: var(--dim); letter-spacing: 0.3em; font-size: 0.85rem; margin-bottom: 1rem; }
 
+  /* How-to-win diagram */
+  .howto {
+    width: min(32rem, 92%);
+    margin: 0.5rem 0 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .howto .caption {
+    color: var(--dim);
+    letter-spacing: 0.2em;
+    font-size: 0.75rem;
+    text-align: center;
+    margin-bottom: 0.2rem;
+  }
+  .scenario {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--panel);
+    overflow: hidden;
+    cursor: default;
+  }
+  .scenario .explain {
+    color: var(--dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    margin-left: auto;
+    font-style: italic;
+    max-width: 10rem;
+    text-align: right;
+    line-height: 1.35;
+  }
+  .chip {
+    font-family: ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--bg);
+    color: var(--dim);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .chip.p1 { transform: translateY(-4px); }
+  .chip.p2 { transform: translateY(4px); }
+  .chip.commit { color: var(--accent); border-color: var(--accent); }
+  .chip.dots { border: none; background: none; }
+  .chip.arrow { border: none; background: none; color: var(--dim); padding: 0 0.1rem; }
+  .chip.outcome { font-weight: bold; letter-spacing: 0.15em; padding: 0.2rem 0.55rem; }
+  .chip.outcome.draw { color: var(--accent); border-color: var(--accent); transform: none; }
+  .chip.outcome.win { color: var(--good); border-color: var(--good); transform: none; }
+
+  /* Hover animation: chips slide in from the left, one after another */
+  .scenario .chip { opacity: 1; transform-origin: left center; }
+  .scenario:hover .chip {
+    animation: slideIn 0.35s ease backwards;
+  }
+  .scenario:hover .chip { animation-delay: calc(var(--i, 0) * 90ms); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px) translateY(var(--ty, 0)); }
+    to   { opacity: 1; transform: translateX(0) translateY(var(--ty, 0)); }
+  }
+  .scenario:hover .chip.p1 { --ty: -4px; }
+  .scenario:hover .chip.p2 { --ty:  4px; }
+  .scenario:hover .chip.outcome,
+  .scenario:hover .chip.arrow,
+  .scenario:hover .chip.dots { --ty: 0; }
+
   .setup form { display: flex; flex-direction: column; gap: 1rem; width: min(26rem, 90%); }
   .setup .row { display: flex; align-items: center; gap: 1rem; }
   .setup label { flex: 0 0 5rem; color: var(--dim); letter-spacing: 0.15em; font-size: 0.9rem; text-align: right; }
@@ -200,16 +273,47 @@
 <div class="overlay setup show" id="setupOverlay">
   <h1>MIND CHESS</h1>
   <p>Check. Check. Check. &mdash; Checkmate.</p>
+
+  <div class="howto">
+    <div class="caption">HOW IT ENDS &mdash; hover to replay</div>
+
+    <div class="scenario" title="Draw">
+      <span class="chip p1" style="--i:0">check</span>
+      <span class="chip p2" style="--i:1">check</span>
+      <span class="chip p1" style="--i:2">check</span>
+      <span class="chip dots" style="--i:3">&hellip;</span>
+      <span class="chip p1 commit" style="--i:4">COMMIT</span>
+      <span class="chip p2" style="--i:5">check</span>
+      <span class="chip p1 commit" style="--i:6">mate</span>
+      <span class="chip arrow" style="--i:7">&rarr;</span>
+      <span class="chip outcome draw" style="--i:8">DRAW</span>
+      <span class="explain">you committed, they held their nerve</span>
+    </div>
+
+    <div class="scenario" title="Win">
+      <span class="chip p1" style="--i:0">check</span>
+      <span class="chip p2" style="--i:1">check</span>
+      <span class="chip p1" style="--i:2">check</span>
+      <span class="chip dots" style="--i:3">&hellip;</span>
+      <span class="chip p1 commit" style="--i:4">COMMIT</span>
+      <span class="chip p2 commit" style="--i:5">COMMIT</span>
+      <span class="chip p1 commit" style="--i:6">mate</span>
+      <span class="chip arrow" style="--i:7">&rarr;</span>
+      <span class="chip outcome win" style="--i:8">WIN</span>
+      <span class="explain">you committed first, just in time</span>
+    </div>
+  </div>
+
   <form id="setupForm">
     <div class="row">
-      <label for="p1name">LINKS</label>
-      <input id="p1name" type="text" maxlength="20" placeholder="Naam speler links" autocomplete="off">
+      <label for="p1name">LEFT</label>
+      <input id="p1name" type="text" maxlength="20" placeholder="Name of left player" autocomplete="off">
     </div>
     <div class="row">
-      <label for="p2name">RECHTS</label>
-      <input id="p2name" type="text" maxlength="20" placeholder="Naam speler rechts" autocomplete="off">
+      <label for="p2name">RIGHT</label>
+      <input id="p2name" type="text" maxlength="20" placeholder="Name of right player" autocomplete="off">
     </div>
-    <button class="btn" type="submit">BEGIN</button>
+    <button class="btn" type="submit">START</button>
   </form>
 </div>
 
@@ -218,7 +322,7 @@
   <div class="tag" id="endTag"></div>
   <h2 id="endTitle"></h2>
   <p id="endReason"></p>
-  <button class="btn" id="restartBtn">OPNIEUW</button>
+  <button class="btn" id="restartBtn">PLAY AGAIN</button>
 </div>
 
 <script>
@@ -331,23 +435,23 @@
     state.phase = 'end';
     if (kind === 'win') {
       els.endTag.textContent = 'CHECKMATE';
-      els.endTitle.textContent = `${state.names[winner].toUpperCase()} WINT`;
+      els.endTitle.textContent = `${state.names[winner].toUpperCase()} WINS`;
       els.endTitle.className = 'win';
-      els.endReason.textContent = `${state.names[winner]} committeerde als eerste, en onthulde op tijd.`;
+      els.endReason.textContent = `${state.names[winner]} committed first, and revealed just in time.`;
     } else {
       els.endTag.textContent = 'CHECKMATE';
-      els.endTitle.textContent = 'GELIJKSPEL';
+      els.endTitle.textContent = 'DRAW';
       els.endTitle.className = 'draw';
       const revealer = state.turn;
       const opp = revealer === 1 ? 2 : 1;
-      els.endReason.textContent = `${state.names[revealer]} was gecommitteerd, maar ${state.names[opp]} niet. Niemand komt als winnaar uit de bus.`;
+      els.endReason.textContent = `${state.names[revealer]} was committed, but ${state.names[opp]} was not. No winner today.`;
     }
     els.endOverlay.classList.add('show');
     render();
   }
 
   function startGame(n1, n2) {
-    state.names = { 1: n1 || 'Speler 1', 2: n2 || 'Speler 2' };
+    state.names = { 1: n1 || 'Player 1', 2: n2 || 'Player 2' };
     state.turn = Math.random() < 0.5 ? 1 : 2;
     state.count = 0;
     state.committed = { 1: false, 2: false };
@@ -362,8 +466,8 @@
     state.phase = 'setup';
     els.endOverlay.classList.remove('show');
     els.setupOverlay.classList.add('show');
-    els.p1name.value = state.names[1] === 'Speler 1' ? '' : state.names[1];
-    els.p2name.value = state.names[2] === 'Speler 2' ? '' : state.names[2];
+    els.p1name.value = state.names[1] === 'Player 1' ? '' : state.names[1];
+    els.p2name.value = state.names[2] === 'Player 2' ? '' : state.names[2];
     render();
     setTimeout(() => els.p1name.focus(), 10);
   }
