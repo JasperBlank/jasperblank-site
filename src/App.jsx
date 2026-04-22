@@ -10,11 +10,18 @@ export default function PersonalWebsite() {
   // Add your work as it grows
   const projects = [
     {
-      title: "Hearo — Product Intelligence",
+      title: "Mind Chess",
       description:
-        "A RAG-based platform that ingests Reddit, App Store, and Hacker News conversations and turns them into cited, structured product intelligence. Built with FastAPI, Chroma vector store, and Claude (Anthropic) for synthesis.",
-      link: "/hearo/",
-      tags: ["Python", "RAG", "LLM", "React"],
+        "A two-player bluff game: keep saying \"Check\" until someone commits to \"Checkmate.\" You win by calling it just before your opponent does. Keyboard-only input keeps commits hidden from the person sitting next to you.",
+      link: "/mind-chess/",
+      tags: ["JavaScript", "Game", "Bluff"],
+    },
+    {
+      title: "1D Chess",
+      description:
+        "Chess collapsed to a single rank. Reachable-position graph and winning-tree viewers, plus a bot with transposition tables, killer moves, LMR, and MCTS.",
+      link: "/1d-chess/",
+      tags: ["JavaScript", "Game", "Search", "AI"],
     },
     {
       title: "Hex Tic Tac Toe",
