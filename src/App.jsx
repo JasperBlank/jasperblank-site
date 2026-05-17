@@ -30,6 +30,13 @@ export default function PersonalWebsite() {
       link: "/hex-tictactoe.html",
       tags: ["JavaScript", "Canvas", "Game", "AI"],
     },
+    {
+      title: "Boardgame Scorekeeper",
+      description:
+        "Per-game templates (Azul, Wingspan, …) with a fast score calculator. Plus mode adds 1–9 in single taps; calculator mode handles bigger sums. Everything persists in your browser.",
+      link: "/scorekeeper/",
+      tags: ["React", "TypeScript", "Local-first"],
+    },
   ]; // { title, description, link, tags }
   const research = []; // { title, abstract, link }
 
