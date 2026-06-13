@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim source map — three-layer view</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin:0; background:#f8fafc; color:#0f172a; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap { max-width:1120px; margin:0 auto; padding:26px 22px 80px; }
+h1 { font-size:25px; margin:0 0 4px; letter-spacing:-0.01em; }
+.sub { color:#475569; margin:0 0 18px; max-width:780px; }
+h2 { font-size:13px; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; margin:32px 0 12px; }
+
+.picker { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; }
+.picker select { font:inherit; font-size:15px; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#0f172a; max-width:100%; }
+.picker .claimtext { font-weight:650; }
+.charnote { font-size:12.5px; color:#475569; margin:10px 2px 0; font-style:italic; }
+
+.layerbar { display:flex; gap:9px; flex-wrap:wrap; margin:16px 0 4px; }
+.layerbar .chip { font-size:12px; padding:5px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#334155; }
+.layerbar .chip b { color:#0f172a; }
+
+.meter-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px 20px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.meter-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.verdict { font-size:18px; font-weight:650; }
+.ends { display:none; }
+.controls { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin-top:14px; padding-top:14px; border-top:1px dashed #e2e8f0; font-size:13px; color:#475569; }
+.controls label { display:flex; align-items:center; gap:8px; }
+.controls input[type=range] { width:150px; }
+.btns button { font:inherit; font-size:12.5px; border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:8px; padding:5px 10px; cursor:pointer; }
+.btns button:hover { background:#f1f5f9; }
+.overlay-status { font-size:11.5px; color:#64748b; min-width:88px; display:inline-block; }
+.note { font-size:12.5px; color:#64748b; margin-top:10px; }
+
+.bib-panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px 16px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.bib-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; font-size:12.5px; color:#475569; }
+.bib-tools select { font:inherit; font-size:12.5px; padding:5px 9px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#0f172a; }
+.bib-tools label { display:flex; align-items:center; gap:6px; }
+.bib-tools button { font:inherit; font-size:12.5px; border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:8px; padding:5px 10px; cursor:pointer; }
+.bib-tools button:hover { background:#f1f5f9; }
+.bib-meta { margin-left:auto; color:#64748b; font-variant-numeric:tabular-nums; }
+.bib-status { color:#0f766e; min-width:54px; }
+.bib-note { font-size:11.5px; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:7px 9px; margin:0 0 12px; }
+.bib-list { margin:0; padding-left:24px; }
+.bib-list li { margin:0 0 9px; padding-left:4px; line-height:1.45; }
+.bib-list a { color:inherit; text-decoration:underline; text-decoration-color:#94a3b8; text-underline-offset:2px; }
+.bib-fallback { color:#64748b; font-size:11px; white-space:nowrap; }
+.bib-pre { margin:0; padding:12px 13px; overflow-x:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:9px; color:#1e293b; font:12px/1.45 "SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; }
+
+.cols { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media (max-width:860px){ .cols{ grid-template-columns:1fr; } }
+.col h3 { font-size:13px; margin:0 0 10px; display:flex; align-items:center; gap:7px; min-height:18px; }
+.dot { width:11px; height:11px; border-radius:3px; display:inline-block; }
+.col.neg .dot{ background:#0f766e; } .col.pos .dot{ background:#b45309; } .col.contest .dot{ background:#475569; }
+
+.card { background:#fff; border:1px solid #e2e8f0; border-left-width:4px; border-radius:11px; padding:12px 13px; margin-bottom:12px; box-shadow:0 1px 2px rgba(15,23,42,.04); transition:opacity .2s; }
+.card.neg { border-left-color:#0f766e; } .card.pos{ border-left-color:#b45309; } .card.contest{ border-left-color:#475569; }
+.card.off { opacity:.4; }
+.card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.card-id { font-weight:650; font-size:13.5px; } .card-id span { font-weight:400; color:#64748b; }
+.card-id a { color:inherit; text-decoration:none; }
+.card-id a:hover { text-decoration:underline; }
+.source-jump { font:inherit; font-size:12.5px; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; }
+.source-jump:hover { color:#0f172a; }
+.toggle { font-size:11px; color:#475569; display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer; }
+.badges { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
+.b { font-size:10.5px; padding:2px 7px; border-radius:999px; font-weight:600; letter-spacing:.02em; }
+.tierA{ background:#dcfce7; color:#166534; } .tierB{ background:#dbeafe; color:#1e40af; } .tierC{ background:#fee2e2; color:#991b1b; }
+.bear { background:#e2e8f0; color:#334155; }
+.weakb { background:#fee2e2; color:#991b1b; }
+.quote { font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:#1e293b; background:#f8fafc; border:1px solid #eef2f7; border-radius:7px; padding:8px 10px; margin:2px 0 8px; }
+.drift { font-size:11.5px; color:#7c2d12; background:#fff7ed; border:1px solid #fed7aa; border-radius:7px; padding:6px 9px; }
+.drift b{ color:#9a3412; }
+.drift.clean { color:#475569; background:#f8fafc; border-color:#e2e8f0; }
+.legend { font-size:12px; color:#64748b; margin:8px 2px 0; }
+
+@keyframes cardflash { 0%{ box-shadow:0 0 0 3px #6366f1; } 100%{ box-shadow:0 1px 2px rgba(15,23,42,.04); } }
+.card.flash { animation: cardflash 1.25s ease; }
+
+.foot { font-size:12px; color:#94a3b8; margin-top:34px; border-top:1px solid #e2e8f0; padding-top:14px; }
+
+/* ---- Layer 2 typed Update Node tree ---- */
+#tree { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px 18px 22px; }
+.tree-claim { display:flex; flex-direction:column; align-items:center; gap:0; }
+.claimnode { background:#0f172a; color:#fff; border-radius:11px; padding:11px 16px; text-align:center; max-width:340px; }
+.claimnode .cl-t { font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.7; }
+.claimnode .cl-p { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; margin-top:2px; }
+.claimnode .cl-ci { font-size:11px; opacity:.72; margin-top:1px; }
+.gatenode { display:inline-flex; flex-direction:column; align-items:center; gap:3px; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:9px; padding:7px 13px; margin:2px 0; }
+.gatenode .g-op { font-size:12px; font-weight:700; letter-spacing:.04em; color:#334155; }
+.gatenode .g-warr { font-size:11px; color:#64748b; }
+.tree-prem { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-top:2px; }
+.pnode { flex:1 1 300px; max-width:360px; background:#fff; border:1px solid #e2e8f0; border-top-width:3px; border-radius:11px; padding:12px 13px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.pnode.neg { border-top-color:#0f766e; } .pnode.pos { border-top-color:#b45309; }
+.pnode .p-lab { font-size:13px; font-weight:650; line-height:1.3; margin-bottom:7px; }
+.pnode .p-row { display:flex; align-items:baseline; gap:6px; font-size:12px; color:#475569; flex-wrap:wrap; }
+.pnode .p-post { margin-left:auto; font-size:16px; font-weight:700; font-variant-numeric:tabular-nums; color:#0f172a; }
+.pnode .p-why { font-size:11px; color:#94a3b8; font-style:italic; margin:4px 0 8px; line-height:1.4; }
+.evrow { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+.evchip { font-size:11px; padding:3px 7px; border-radius:7px; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; font-variant-numeric:tabular-nums; transition:opacity .15s; }
+.evchip:hover { background:#eef2f7; }
+.evchip.off { opacity:.32; text-decoration:line-through; }
+.evchip b { font-weight:650; }
+.evchip .lr-pos { color:#b45309; } .evchip .lr-neg { color:#0f766e; }
+.editnum { font:inherit; font-size:12px; width:52px; padding:2px 5px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#0f172a; font-variant-numeric:tabular-nums; }
+.editnum:focus { outline:2px solid #6366f1; outline-offset:0; border-color:#6366f1; }
+.overlay-mini { display:inline-flex; align-items:center; gap:3px; margin-left:4px; color:#64748b; font-size:10.5px; }
+.overlay-mini .editnum { width:48px; font-size:11px; padding:1px 4px; }
+.overlay-mini.w .editnum { width:42px; }
+.overlay-mini.sigma .editnum { width:42px; }
+.model-mult-row { margin-top:7px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; font-size:11px; color:#64748b; }
+.model-mult-pill { border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:3px 6px; display:inline-flex; align-items:center; gap:4px; }
+.model-mult-pill b { color:#334155; }
+.treeconn { display:flex; flex-direction:column; align-items:center; color:#94a3b8; line-height:1; }
+.treeconn .bar { width:1px; height:14px; background:#cbd5e1; }
+.cc-note { font-size:11px; color:#7c2d12; background:#fff7ed; border:1px solid #fed7aa; border-radius:7px; padding:6px 9px; margin-top:8px; line-height:1.4; }
+
+/* typed model tree */
+.model-tree { display:flex; flex-direction:column; gap:14px; }
+.model-root { background:#0f172a; color:#fff; border-radius:11px; padding:13px 16px; text-align:center; max-width:560px; align-self:center; }
+.model-root .model-kicker { font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.72; }
+.model-root .model-title { font-size:18px; font-weight:700; line-height:1.25; margin-top:3px; }
+.model-root .model-sub { font-size:12px; opacity:.74; margin-top:3px; }
+.model-branches { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:12px; align-items:stretch; }
+.model-card { background:#fff; border:1px solid #e2e8f0; border-top:4px solid #475569; border-radius:11px; padding:12px 13px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.model-card.effect_size { border-top-color:#b45309; }
+.model-card.hypothesis_partition { border-top-color:#0f766e; }
+.model-card.ladder { border-top-color:#6366f1; }
+.model-card.decision { border-top-color:#475569; }
+.model-card.evidence_admissibility { border-top-color:#7c3aed; }
+.model-card h4 { margin:0 0 4px; font-size:14px; line-height:1.3; }
+.model-type { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#64748b; font-weight:650; margin-bottom:6px; }
+.model-question { font-size:12.5px; color:#1e293b; line-height:1.4; margin:0 0 7px; }
+.model-output { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:#334155; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:999px; padding:2px 7px; margin:2px 0 6px; }
+.model-card ul { margin:7px 0 0 17px; padding:0; color:#334155; font-size:12.5px; line-height:1.45; }
+.model-card li { margin:3px 0; }
+.model-card .model-caption { font-size:12px; color:#64748b; margin-top:6px; }
+.model-evidence { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }
+.model-chip { font-size:11px; padding:3px 7px; border-radius:7px; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; transition:opacity .15s; }
+.model-chip:hover { background:#eef2f7; }
+.model-chip.off { opacity:.32; text-decoration:line-through; }
+.model-note { font-size:11.5px; color:#475569; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px; }
+.model-contract { font-size:11.5px; color:#475569; border-top:1px dashed #e2e8f0; margin-top:10px; padding-top:8px; }
+.model-contract b { color:#334155; }
+.model-consumes { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.model-consumes span { font-size:10.5px; padding:2px 6px; border-radius:999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
+.model-bars { margin-top:8px; display:flex; flex-direction:column; gap:5px; }
+.model-bar { display:grid; grid-template-columns:minmax(92px,1fr) 2fr 42px; align-items:center; gap:7px; font-size:11.5px; color:#475569; }
+.model-bar-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.model-bar-track { height:9px; background:#f1f5f9; border-radius:999px; overflow:hidden; }
+.model-bar-fill { height:100%; border-radius:999px; }
+.model-bar-pct { text-align:right; font-variant-numeric:tabular-nums; color:#334155; font-weight:650; }
+.model-stack { margin-top:12px; }
+.model-stack-track { display:flex; width:100%; height:22px; overflow:hidden; border-radius:8px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.18); }
+.model-stack-seg { height:100%; min-width:2px; }
+.model-stack-labels { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:6px; margin-top:7px; font-size:11px; color:rgba(255,255,255,.82); }
+.model-stack-labels span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.model-detail-fold { margin-top:14px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; }
+.model-detail-fold > summary { cursor:pointer; list-style:none; padding:11px 14px; font-size:12.5px; font-weight:650; color:#334155; display:flex; align-items:center; gap:8px; user-select:none; }
+.model-detail-fold > summary::-webkit-details-marker { display:none; }
+.model-detail-fold > summary::before { content:"▸"; font-size:11px; color:#64748b; transition:transform .15s; }
+.model-detail-fold[open] > summary::before { transform:rotate(90deg); }
+.model-detail-fold > summary .model-detail-hint { font-weight:400; color:#64748b; }
+.model-detail-fold > .model-detail-body { padding:0 14px 14px; }
+.model-layer3 { margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0; }
+.model-l3-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.model-l3-title { font-weight:700; font-size:14px; color:#0f172a; }
+.model-l3-kind { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:#475569; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:999px; padding:2px 7px; }
+.model-l3-summary { font-size:12.5px; color:#475569; margin:8px 0 0; }
+.model-l3-bars { display:flex; flex-direction:column; gap:7px; }
+.model-l3-row { display:grid; grid-template-columns:minmax(160px,1fr) 3fr 48px; align-items:center; gap:10px; font-size:12.5px; }
+.model-l3-track { height:14px; border-radius:999px; background:#eef2f7; overflow:hidden; }
+.model-l3-fill { height:100%; border-radius:999px; }
+.model-l3-pct { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; color:#334155; }
+.model-l3-empty { font-size:12.5px; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:9px 10px; }
+.model-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.model-nav button { font:inherit; font-size:12.5px; border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:8px; padding:5px 10px; cursor:pointer; }
+.model-nav button:hover { background:#f1f5f9; }
+.model-nav .active { border-color:#0f172a; color:#0f172a; background:#f8fafc; font-weight:650; }
+.model-subclaim { cursor:pointer; position:relative; }
+.model-subclaim:hover { border-color:#94a3b8; box-shadow:0 2px 8px rgba(15,23,42,.08); }
+.model-subclaim.active { outline:2px solid #0f172a; outline-offset:2px; }
+.model-evidence-list { display:grid; gap:8px; margin-top:10px; }
+.model-evidence-item { border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; padding:8px 10px; font-size:12px; color:#334155; }
+.model-evidence-item b { color:#0f172a; }
+.model-evidence-item .q { display:block; margin-top:3px; color:#475569; font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+.model-compute-note { color:#64748b; margin-top:5px; font-size:11.5px; line-height:1.35; }
+.model-compute-shift { font-variant-numeric:tabular-nums; color:#334155; }
+.model-modifier { color:#64748b; margin-left:3px; font-variant-numeric:tabular-nums; }
+.model-corr { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.model-corr .corr-hint { font-size:11.5px; color:#64748b; font-style:italic; }
+
+/* Embedded admissibility — rendered inline under the consuming node's compute block. */
+.model-adm-section { margin-top:18px; padding:12px 12px 10px; border:1px dashed #cbd5e1; border-radius:11px; background:#f8fafc; }
+.model-adm-section-head { font-size:12px; color:#475569; margin-bottom:10px; }
+.model-adm-section-head b { color:#0f172a; }
+.model-adm-block { background:#fff; border:1px solid #e2e8f0; border-left:4px solid #6366f1; border-radius:9px; padding:10px 11px; margin-top:10px; }
+.model-adm-block:first-of-type { margin-top:0; }
+.model-adm-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:12px; color:#475569; margin-bottom:6px; }
+.model-adm-tag { font-size:10.5px; font-weight:700; letter-spacing:.06em; color:#4f46e5; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px; padding:2px 8px; }
+.model-adm-name { font-weight:650; color:#0f172a; font-size:13px; }
+.model-adm-applies { color:#64748b; font-size:11.5px; }
+.model-adm-applies b { color:#334155; font-weight:650; }
+.model-proj-section { margin-top:18px; padding:12px; border:1px dashed #cbd5e1; border-radius:11px; background:#f8fafc; }
+.model-proj-head { font-size:12px; color:#475569; margin-bottom:10px; }
+.model-proj-head b { color:#0f172a; }
+.model-proj-block { background:#fff; border:1px solid #e2e8f0; border-left:4px solid #475569; border-radius:9px; padding:10px 11px; margin-top:10px; overflow:auto; }
+.model-proj-block:first-of-type { margin-top:0; }
+.model-proj-title { display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:12px; color:#475569; margin-bottom:7px; }
+.model-proj-name { font-weight:650; color:#0f172a; font-size:13px; }
+.model-proj-table { width:100%; border-collapse:collapse; min-width:560px; font-size:11.5px; color:#334155; }
+.model-proj-table th, .model-proj-table td { border-top:1px solid #e2e8f0; padding:5px 6px; text-align:right; vertical-align:top; font-variant-numeric:tabular-nums; }
+.model-proj-table th:first-child, .model-proj-table td:first-child { text-align:left; min-width:150px; }
+.model-proj-table th { color:#64748b; font-weight:650; background:#f8fafc; }
+.model-proj-p { display:block; color:#64748b; font-size:10.5px; margin-top:1px; }
+.model-proj-cell b { display:block; color:#0f172a; font-weight:650; }
+.model-proj-cell span { display:block; color:#64748b; font-size:10.5px; }
+
+/* Child-claim chip — click toggles admission of a child input into this parent. Visually distinct
+   from source chips (indigo accent, ↳ arrow) to signal "drill-down to child" rather than "source quote". */
+.evchip-claim { border-color:#c7d2fe; background:#eef2ff; }
+.evchip-claim:hover { background:#e0e7ff; }
+.evchip-claim b { color:#4338ca; }
+.evchip-claim.off { opacity:.32; text-decoration:line-through; }
+
+/* Credible interval bands shown after posterior probabilities. */
+.p-ci { font-size:11px; color:#6366f1; font-weight:500; font-variant-numeric:tabular-nums; margin-left:6px; }
+.model-bar-ci { font-size:10px; color:#6366f1; font-variant-numeric:tabular-nums; margin-left:5px; font-weight:400; }
+.model-l3-ci { font-size:10.5px; color:#6366f1; font-variant-numeric:tabular-nums; margin-left:5px; font-weight:400; }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Claim source map</h1>
+
+  <div class="picker">
+    <label for="claimsel" style="font-size:13px;color:#64748b">Claim:</label>
+    <select id="claimsel"></select>
+    <span class="claimtext" id="claimtext"></span>
+  </div>
+  <p class="charnote" id="charnote" style="display:none"></p>
+
+  <div class="layerbar" style="display:none">
+    <span class="chip"><b>Layer 1</b> · verbatim base + tier</span>
+    <span class="chip"><b>guard</b> · claim-vs-quote drift</span>
+    <span class="chip"><b>Layer 2</b> · shared structure</span>
+    <span class="chip"><b>Layer 3</b> · your overlays</span>
+  </div>
+
+  <h2>Layer 3 — your overlays → the conclusion</h2>
+  <div class="meter-card">
+    <div class="meter-head">
+      <div class="verdict" id="verdict">—</div>
+      <div style="font-size:12.5px;color:#64748b" id="netinfo"></div>
+    </div>
+    <div id="modelLayer3" class="model-layer3" style="display:none"></div>
+    <div class="controls">
+      <span class="btns">
+        <button id="resetBtn">Reset</button>
+        <button id="anchoredBtn">Anchored sources only</button>
+        <button id="copyOverlayBtn" type="button">Copy overlay</button>
+        <button id="pasteOverlayBtn" type="button">Paste overlay</button>
+        <span class="overlay-status" id="overlayStatus"></span>
+      </span>
+    </div>
+    <div class="note">The visible result is computed from editable Update Nodes. Source admission, priors, prior strength, source shifts, admissibility multipliers, dependence weights, and child projections can be inspected and changed in Layer 2.</div>
+  </div>
+
+  <h2>Layer 2 — how the conclusion is built</h2>
+  <p class="legend" id="l2bnintro" style="display:none">Layer 2 shows typed Update Nodes: editable priors, prior strength, source shifts, source weights, admissibility multipliers, dependence adjustments, and child-claim projections.</p>
+  <div id="tree" style="display:none"></div>
+  <p class="legend" id="cruxnote"></p>
+
+  <h2>Layer 1 — the sources</h2>
+  <div class="cols">
+    <div class="col neg"><h3><span class="dot"></span><span id="hdr-neg"></span></h3><div id="col-neg"></div></div>
+    <div class="col pos"><h3><span class="dot"></span><span id="hdr-pos"></span></h3><div id="col-pos"></div></div>
+    <div class="col contest"><h3><span class="dot"></span>Contestation / mixed</h3><div id="col-contest"></div></div>
+  </div>
+  <h2>Bibliography</h2>
+  <div class="bib-panel">
+    <div class="bib-tools">
+      <label for="citeStyle">Format:
+        <select id="citeStyle">
+          <option value="apa">APA 7</option>
+          <option value="chicago">Chicago notes</option>
+          <option value="bibtex">BibTeX</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="citeAdmittedOnly"> admitted only</label>
+      <button id="copyBibBtn" type="button">Copy</button>
+      <button id="downloadBibBtn" type="button">Download</button>
+      <span class="bib-status" id="bibStatus"></span>
+      <span class="bib-meta" id="bibMeta"></span>
+    </div>
+    <div class="bib-note" id="bibNote"></div>
+    <ol class="bib-list" id="bibList"></ol>
+    <pre class="bib-pre" id="bibTex" style="display:none"></pre>
+  </div>
+
+  <div class="foot">Base sources and typed model structure are shared across readers; overlays are per-reader edits to admissibility, priors, shifts, weights, and child projections.</div>
+</div>
+
+<script src="./claims.js"></script>
+<script>
+/* ---------- RENDERER (claim-agnostic) ---------- */
+let current = null;
+let currentKey = null;
+const state = {};         // source id -> admitted?
+let currentBibText = "";
+let modelFocusKey = "root";
+// Layer 2 starts in the simple bars-only view; the detailed editable model lives behind this fold.
+let modelDetailOpen = false;
+function modelDetailFold(inner){
+  if(!inner || !inner.trim()) return "";
+  return `<details class="model-detail-fold" id="modelDetailFold" ${modelDetailOpen ? "open" : ""}>
+    <summary>Detailed model <span class="model-detail-hint">— every editable value: priors, prior strength, source shifts, weights, admissibility, projections</span></summary>
+    <div class="model-detail-body">${inner}</div>
+  </details>`;
+}
+const modelComputeState = {};              // typed model node key -> editable compute priors
+
+const tierClass = t => t==="A"?"tierA":t==="B"?"tierB":"tierC";
+const sigmoid = x => 1/(1+Math.exp(-x));
+const logit = p => Math.log(p/(1-p));
+const cleanDrift = d => /^None|Institutional restatement|excluded from the balance/.test(d);
+function randn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function hasModelTree(){ return !!(current && current.model && current.model.children); }
+function claimHasModelTree(claim){ return !!(claim && claim.model && claim.model.children); }
+function claimRenderMode(claim){
+  claim = claim || current;
+  const renderAs = claim && claim.model && claim.model.renderAs;
+  return claimHasModelTree(claim) && (!renderAs || renderAs === "typed_model") ? "typed_model" : renderAs || "unsupported";
+}
+function renderModeIsTyped(mode){ return mode === "typed_model"; }
+function validateClaimSchema(claim, key){
+  const issues = [];
+  const renderAs = claim && claim.model && claim.model.renderAs;
+  const issue = (level, message)=>issues.push({key, level, message});
+  if(renderAs && renderAs !== "typed_model"){
+    issue("error", `unsupported model.renderAs "${renderAs}"`);
+  }
+  if(!claimHasModelTree(claim)){
+    issue("error", "typed_model requires model.children");
+    return issues;
+  }
+  if(claim.bn || claim.multi || claim.ladder || claim.graph || claim.outcomes || claim.readings){
+    issue("error", "legacy fallback fields are no longer supported; use typed model.children + compute");
+  }
+  if(claim.model && claim.model.compute){
+    const kids = claim.model.children || {};
+    (claim.model.compute.evidence || []).forEach(ev=>{
+      if(ev.claim && !kids[ev.claim]) issue("error", `root compute references missing child claim "${ev.claim}"`);
+    });
+  }
+  return issues;
+}
+function validateAllClaims(){
+  const issues = [];
+  Object.keys(CLAIMS).forEach(key=>{
+    validateClaimSchema(CLAIMS[key], key).forEach(issue=>issues.push(issue));
+  });
+  return issues;
+}
+function reportClaimSchemaIssues(){
+  const issues = validateAllClaims();
+  issues.forEach(issue=>{
+    const msg = `[claim schema ${issue.level}] ${issue.key}: ${issue.message}`;
+    if(issue.level === "error") console.error(msg); else console.warn(msg);
+  });
+  return issues;
+}
+
+function loadClaim(key){
+  current = CLAIMS[key];
+  currentKey = key;
+  const mode = claimRenderMode(current);
+  Object.keys(state).forEach(k=>delete state[k]);
+  current.sources.forEach(s=>state[s.id]=true);
+  modelFocusKey = "root";
+  resetModelComputeState();
+  document.getElementById("claimtext").textContent = "“"+current.claim+"”";
+  const modelOutputText = current.model
+    ? (typeof current.model.output === "string" ? current.model.output : modelOutputLabel(current.model.output && current.model.output.kind))
+    : "";
+  const modelNote = current.model
+    ? `<br><b>Model target:</b> ${current.model.type} -> ${modelOutputText || current.model.target || "typed output"}`
+    : "";
+  document.getElementById("charnote").innerHTML = "What this claim foregrounds: "+current.character+modelNote;
+  document.getElementById("charnote").style.display = current.model ? "" : "none";
+  document.getElementById("cruxnote").innerHTML = "<b>Where it localizes:</b> "+current.cruxnote;
+  const modelView = renderModeIsTyped(mode);
+  document.getElementById("modelLayer3").style.display = modelView ? "" : "none";
+  document.querySelector(".cols").style.display       = "";
+
+  document.getElementById("tree").style.display     = modelView ? "" : "none";
+  document.getElementById("l2bnintro").style.display= modelView ? "" : "none";
+  document.getElementById("cruxnote").style.display = "none";
+  document.getElementById("anchoredBtn").style.display    = "";
+  if(modelView) {
+    document.getElementById("l2bnintro").innerHTML =
+      "This claim is rendered as a <b>typed effect-size / net-benefit model</b>, not as one binary probability. Each branch keeps a separate question visible: eligible population, cognitive slowing, clinical meaningfulness, ARIA harms, treatment burden, and net patient benefit. Computed branches start from a prior, add admitted source shifts, and normalize the typed output.";
+  }
+
+  renderCards();
+  renderModelTree();
+  update();
+}
+
+function bearingBadge(s){
+  const branches = modelSourceLabels(s.id);
+  return branches.length
+    ? `<span class="b bear">model: ${branches.slice(0,2).join(" / ")}${branches.length>2?" +"+(branches.length-2):""}</span>`
+    : `<span class="b bear">model context</span>`;
+}
+
+function escapeAttr(v){
+  return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+function escapeHTML(v){
+  return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function textOnly(v){
+  const div = document.createElement("div");
+  div.innerHTML = String(v || "");
+  return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+}
+function sourceHref(s){
+  return s.url || "";
+}
+function sourceTitle(s){
+  const href = sourceHref(s);
+  const title = href
+    ? '<a href="' + escapeAttr(href) + '" target="_blank" rel="noopener noreferrer" title="Open primary source">' + s.title + '</a>'
+    : s.title;
+  return s.id + ' <span>' + title + '</span>';
+}
+
+function todayISO(){
+  return new Date().toISOString().slice(0, 10);
+}
+function readableDate(iso){
+  if(!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  if(Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" });
+}
+function extractDoi(url){
+  if(!url) return "";
+  const decoded = decodeURIComponent(url);
+  const match = decoded.match(/(?:doi\.org\/|\/doi\/(?:full\/)?|\/content\/|[?&]id=)(10\.\d{4,9}\/[^?#\s"]+)/i);
+  return match ? match[1].replace(/\/fulltext$/i, "") : "";
+}
+function inferCitationType(s, c, doi){
+  const url = (c.url || s.url || "").toLowerCase();
+  const title = (c.title || s.title || "").toLowerCase();
+  if(c.type) return c.type;
+  if(url.includes("courtlistener") || title.includes("lawsuit")) return "legal";
+  if(url.includes("arxiv.org") || url.includes("biorxiv.org")) return "preprint";
+  if(doi) return "journal-article";
+  if(url.endsWith(".pdf") || /report|advisory|recommendation|assessment|white paper|snapshot|review|guidance/.test(title)) return "report";
+  return "webpage";
+}
+function citationData(s){
+  const c = s.citation || {};
+  const url = c.url || s.url || "";
+  const doi = c.doi || extractDoi(url);
+  const year = c.year || ((textOnly(c.title || s.title).match(/\b(19|20)\d{2}\b/) || [])[0]) || "n.d.";
+  return {
+    type: inferCitationType(s, c, doi),
+    authors: c.authors || [],
+    year,
+    title: textOnly(c.title || s.title),
+    venue: c.venue || "",
+    doi,
+    url,
+    accessed: c.accessed || todayISO(),
+    structured: !!s.citation
+  };
+}
+function authorInitials(given){
+  return given.trim().split(/[\s-]+/).filter(Boolean).map(part=>part[0].toUpperCase()+".").join(" ");
+}
+function apaAuthorName(name){
+  if(!name) return "";
+  if(name.toLowerCase()==="et al.") return "et al.";
+  if(!name.includes(",")) return name;
+  const [last, rest] = name.split(",", 2);
+  return `${last.trim()}, ${authorInitials(rest || "")}`.trim();
+}
+function formatAuthorList(authors, style){
+  if(!authors || !authors.length) return "";
+  const names = authors.map(a=>style==="apa" ? apaAuthorName(a) : a).filter(Boolean);
+  if(names.length===1) return names[0];
+  if(names.length===2) return style==="apa" ? `${names[0]} & ${names[1]}` : `${names[0]} and ${names[1]}`;
+  const last = names[names.length-1];
+  return style==="apa"
+    ? `${names.slice(0,-1).join(", ")}, & ${last}`
+    : `${names.slice(0,-1).join(", ")}, and ${last}`;
+}
+function citationLocator(c){
+  if(c.doi) return `https://doi.org/${c.doi}`;
+  return c.url || "";
+}
+function apaCitation(s){
+  const c = citationData(s);
+  const authors = formatAuthorList(c.authors, "apa");
+  const locator = citationLocator(c);
+  const parts = [];
+  if(authors) parts.push(`${authors}.`);
+  parts.push(`(${c.year}).`);
+  parts.push(`${c.title}.`);
+  if(c.venue) parts.push(`${c.venue}.`);
+  if(locator) parts.push(locator);
+  else if(c.type==="webpage" || c.type==="report") parts.push(`Retrieved ${readableDate(c.accessed)}.`);
+  return parts.join(" ");
+}
+function chicagoCitation(s){
+  const c = citationData(s);
+  const authors = formatAuthorList(c.authors, "chicago");
+  const locator = citationLocator(c);
+  const parts = [];
+  if(authors) parts.push(`${authors}.`);
+  parts.push(`"${c.title}."`);
+  if(c.venue) parts.push(`${c.venue}.`);
+  if(c.year !== "n.d.") parts.push(`${c.year}.`);
+  if(locator) parts.push(locator);
+  return parts.join(" ");
+}
+function bibtexType(type){
+  return type==="journal-article" ? "article" :
+    type==="report" ? "techreport" :
+    type==="legal" ? "misc" :
+    "misc";
+}
+function bibtexEscape(v){
+  return textOnly(v).replace(/[{}]/g, "").trim();
+}
+function bibtexKey(s){
+  return `${currentKey}-${s.id}`.replace(/[^A-Za-z0-9:_-]/g, "_");
+}
+function bibtexCitation(s){
+  const c = citationData(s);
+  const fields = [];
+  if(c.authors.length) fields.push(["author", c.authors.join(" and ")]);
+  fields.push(["title", c.title]);
+  if(c.year !== "n.d.") fields.push(["year", c.year]);
+  if(c.venue){
+    const field = c.type==="journal-article" ? "journal" : c.type==="report" ? "institution" : "howpublished";
+    fields.push([field, c.venue]);
+  }
+  if(c.doi) fields.push(["doi", c.doi]);
+  if(c.url) fields.push(["url", c.url]);
+  if(c.type==="webpage" || c.type==="report") fields.push(["note", `Accessed ${c.accessed}`]);
+  const body = fields.map(([k,v], i)=>`  ${k} = {${bibtexEscape(v)}}${i<fields.length-1?",":""}`).join("\n");
+  return `@${bibtexType(c.type)}{${bibtexKey(s)},\n${body}\n}`;
+}
+function linkifyCitation(text, s){
+  const c = citationData(s);
+  const locator = citationLocator(c);
+  let html = escapeHTML(text);
+  if(locator){
+    const safe = escapeHTML(locator);
+    html = html.replace(safe, `<a href="${escapeAttr(locator)}" target="_blank" rel="noopener noreferrer">${safe}</a>`);
+  }
+  return html;
+}
+function bibliographySources(){
+  const admittedOnly = document.getElementById("citeAdmittedOnly").checked;
+  return current.sources.filter(s=>!admittedOnly || state[s.id]);
+}
+function renderBibliography(){
+  if(!current) return;
+  const style = document.getElementById("citeStyle").value;
+  const sources = bibliographySources();
+  const structured = sources.filter(s=>s.citation).length;
+  const list = document.getElementById("bibList");
+  const pre = document.getElementById("bibTex");
+  const note = document.getElementById("bibNote");
+  const meta = document.getElementById("bibMeta");
+  meta.textContent = `${sources.length}/${current.sources.length} sources · ${structured} structured`;
+  note.textContent = structured === sources.length
+    ? "All visible entries use structured citation metadata."
+    : "Entries without a structured citation object are formatted from the source title, year hint, DOI when detectable, and canonical URL. Backfilling authors, full titles, venues, and DOI fields will upgrade those entries without changing the renderer.";
+  if(style==="bibtex"){
+    currentBibText = sources.map(bibtexCitation).join("\n\n");
+    list.style.display = "none";
+    pre.style.display = "";
+    pre.textContent = currentBibText;
+    return;
+  }
+  const formatter = style==="chicago" ? chicagoCitation : apaCitation;
+  currentBibText = sources.map((s,i)=>`${i+1}. ${formatter(s)}`).join("\n");
+  pre.style.display = "none";
+  list.style.display = "";
+  list.innerHTML = sources.map(s=>{
+    const fallback = s.citation ? "" : ' <span class="bib-fallback">metadata fallback</span>';
+    return `<li>${linkifyCitation(formatter(s), s)}${fallback}</li>`;
+  }).join("");
+}
+async function copyBibliography(){
+  const status = document.getElementById("bibStatus");
+  try {
+    await navigator.clipboard.writeText(currentBibText);
+    status.textContent = "Copied";
+  } catch(e) {
+    const ta = document.createElement("textarea");
+    ta.value = currentBibText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    status.textContent = "Copied";
+  }
+  window.setTimeout(()=>{ status.textContent = ""; }, 1800);
+}
+function downloadBibliography(){
+  const style = document.getElementById("citeStyle").value;
+  const ext = style==="bibtex" ? "bib" : "txt";
+  const blob = new Blob([currentBibText], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${currentKey}-bibliography.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function card(s){
+  const off = state[s.id] ? "" : " off";
+  return `<div class="card ${s.side}${off}" id="card-${s.id}">
+    <div class="card-top">
+      <div class="card-id">${sourceTitle(s)}</div>
+      <label class="toggle"><input type="checkbox" data-id="${s.id}" ${state[s.id]?"checked":""}> admit</label>
+    </div>
+    <div class="badges">
+      <span class="b ${tierClass(s.tier)}">Tier ${s.tier}</span>
+      ${bearingBadge(s)}
+      ${s.weak?'<span class="b weakb">contested</span>':''}
+    </div>
+    <div class="quote">“${s.quote}”</div>
+    <div class="drift ${cleanDrift(s.drift)?'clean':''}"><b>drift:</b> ${s.drift}</div>
+  </div>`;
+}
+
+function wireCheckboxes(){
+  document.querySelectorAll('input[type=checkbox][data-id]').forEach(cb=>{
+    cb.addEventListener('change', e=>{ state[e.target.dataset.id]=e.target.checked; update(); });
+  });
+}
+
+function renderCards(){
+  ["neg","pos","contest"].forEach(side=>{
+    const items = current.sources.filter(s=>s.side===side);
+    document.getElementById("col-"+side).innerHTML =
+      items.length ? items.map(card).join("") : '<div style="font-size:12px;color:#94a3b8">— none —</div>';
+  });
+  wireCheckboxes();
+}
+
+function focusCard(id){
+  const el = document.getElementById('card-'+id);
+  if(!el) return;
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+/* ---------- typed model tree (effect size / net benefit / DAG-like branches) ---------- */
+const MODEL_TYPE_CONTRACTS = {
+  binary_bn:{answers:"Is a narrow proposition satisfied?",output:"probability",children:"premises / safeguards",compose:"logic gate + warrant"},
+  hypothesis_partition:{answers:"Which mutually exclusive explanation or scope bucket fits?",output:"hypothesis_distribution",children:"competing hypotheses",compose:"renormalized distribution over branches"},
+  forecast:{answers:"When, if ever, does the target event occur?",output:"time_bucket_distribution",children:"causal drivers",compose:"driver states -> scenario distribution"},
+  effect_size:{answers:"How large is the effect, for whom, against what comparator?",output:"effect_distribution",children:"benefit, harm, population, comparator, meaning",compose:"effect estimates and modifiers"},
+  causal_dag:{answers:"Does X cause Y through a plausible graph?",output:"causal_structure + effect requests",children:"edges, confounders, mediators, measurement",compose:"DAG validity then edge/effect magnitudes"},
+  comparative:{answers:"How does X compare with Y under the relevant counterfactual?",output:"comparative_distribution",children:"options, costs, benefits, constraints",compose:"difference/rank against alternatives"},
+  evidence_admissibility:{answers:"How much downstream weight should a source or source-cluster receive?",output:"source_weight_modifier",children:"provenance, access, conflict, independence",compose:"posterior-weighted source multipliers"},
+  decision:{answers:"Should we do X under a stated objective?",output:"decision_value",children:"benefits, harms, costs, constraints, alternatives, values",compose:"empirical outputs + value function"},
+  ladder:{answers:"Which reading of the wording is being tested?",output:"reading_set",children:"nested readings",compose:"separate credence per reading"}
+};
+const MODEL_BAR_COLORS = ["#0f766e","#0e7490","#6366f1","#b45309","#b91c1c","#64748b"];
+function modelTypeName(type){
+  return (type || "model").replace(/_/g, " ");
+}
+function modelLabel(key){
+  const labels = {
+    eligibility:"Eligible population",
+    population:"Eligible population",
+    cognitiveSlowing:"Cognitive slowing",
+    clinicalMeaning:"Clinical meaningfulness",
+    harms:"ARIA harms and reactions",
+    burden:"Treatment burden and cost",
+    burdenAndCost:"Treatment burden and cost",
+    netBenefit:"Net patient benefit"
+  };
+  return labels[key] || key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+}
+function modelChildren(node){
+  return node && node.children ? node.children : {};
+}
+function modelPreferredKeys(kids){
+  const preferred = ["eligibility","population","cognitiveSlowing","clinicalMeaning","harms","burdenAndCost","burden","netBenefit"];
+  return preferred.filter(k=>kids[k]).concat(Object.keys(kids).filter(k=>!preferred.includes(k)));
+}
+function modelPathKey(key, path=[]){
+  return path && path.length ? path.join(".") : key;
+}
+function walkModelNodes(node, cb, key="root", path=[]){
+  cb(node, key, path);
+  const kids = modelChildren(node);
+  modelPreferredKeys(kids).forEach(k=>walkModelNodes(kids[k], cb, k, path.concat(k)));
+  // Visit embedded admissibility entries (compute.admissibility[*]). They participate in the
+  // tree for state init and identity lookup, but have no further children of their own.
+  const adm = node && node.compute && node.compute.admissibility;
+  if(adm && typeof adm === "object"){
+    Object.keys(adm).forEach(k=>{ cb(adm[k], k, path.concat("adm", k)); });
+  }
+}
+function modelComputeKeyForNode(node){
+  let found = "root";
+  if(!current || !current.model) return found;
+  walkModelNodes(current.model, (n, key, path)=>{
+    if(n === node) found = modelPathKey(key, path);
+  });
+  return found;
+}
+function clonePlain(value){
+  return value && typeof value === "object" ? JSON.parse(JSON.stringify(value)) : value;
+}
+function resetModelComputeState(){
+  Object.keys(modelComputeState).forEach(k=>delete modelComputeState[k]);
+  if(!hasModelTree()) return;
+  walkModelNodes(current.model, (node, key, path)=>{
+    if(!node.compute || !Array.isArray(node.compute.prior)) return;
+    const nodeKey = modelPathKey(key, path);
+    const sharedN = typeof node.compute.priorN === "number" ? node.compute.priorN : 1;
+    const corr0 = typeof node.compute.corr === "number" ? Math.max(0, Math.min(1, node.compute.corr)) : 0;
+    modelComputeState[nodeKey] = {method:node.compute.method, keys:[], prior:{}, n:{}, evidence:{}, multipliers:{}, corr:corr0};
+    node.compute.prior.forEach(st=>{
+      modelComputeState[nodeKey].keys.push(st.key);
+      modelComputeState[nodeKey].prior[st.key] = st.p;
+      modelComputeState[nodeKey].n[st.key] = node.compute.method === "independent_logit_update" && typeof st.n === "number" ? st.n : sharedN;
+      if(typeof st.multiplier === "number") modelComputeState[nodeKey].multipliers[st.key] = {__default:st.multiplier};
+      if(st.multipliers && typeof st.multipliers === "object") modelComputeState[nodeKey].multipliers[st.key] = {...st.multipliers};
+    });
+    (node.compute.evidence || []).forEach((ev, idx)=>{
+      const evState = {w:typeof ev.w === "number" ? ev.w : 1, conf:typeof ev.conf === "number" ? ev.conf : 0};
+      if(typeof ev.logLR === "number") evState.logLR = ev.logLR;
+      if(ev.shift) evState.shift = clonePlain(ev.shift);
+      if(ev.shifts) evState.shifts = clonePlain(ev.shifts);
+      modelComputeState[nodeKey].evidence[String(idx)] = evState;
+    });
+  });
+}
+function modelEditablePrior(node){
+  const defaults = node.compute && Array.isArray(node.compute.prior) ? node.compute.prior : [];
+  const stateForNode = modelComputeState[modelComputeKeyForNode(node)];
+  if(!stateForNode) return defaults;
+  return defaults.map(st=>({...st, p:stateForNode.prior[st.key] ?? st.p}));
+}
+function modelPriorStrength(node, priorKey){
+  const spec = node && node.compute;
+  const stateForNode = modelComputeState[modelComputeKeyForNode(node)];
+  if(stateForNode && stateForNode.n && typeof stateForNode.n[priorKey] === "number") return stateForNode.n[priorKey];
+  const prior = spec && Array.isArray(spec.prior) ? spec.prior : [];
+  const st = prior.find(x=>x.key === priorKey);
+  if(spec && spec.method === "independent_logit_update" && st && typeof st.n === "number") return st.n;
+  return spec && typeof spec.priorN === "number" ? spec.priorN : 1;
+}
+// Source-correlation knob alpha in [0,1]. 0 = sources are independent evidence and confidence
+// accumulates (pure additive log-odds Bayes); 1 = sources are redundant readings of one signal and
+// the node opinion-pools (averages) them. Reader-editable; defaults to compute.corr or 0.
+function modelCorr(node){
+  const entry = modelComputeState[modelComputeKeyForNode(node)];
+  let a = entry && typeof entry.corr === "number"
+    ? entry.corr
+    : (node && node.compute && typeof node.compute.corr === "number" ? node.compute.corr : 0);
+  return Math.max(0, Math.min(1, a));
+}
+function setModelCorr(nodeKey, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry) return;
+  entry.corr = Math.max(0, Math.min(1, value));
+}
+function modelCorrHint(a){
+  return a < 0.02 ? "independent — confidence accumulates"
+    : a > 0.98 ? "redundant — sources pooled (averaged)"
+    : "partial pooling";
+}
+function setModelPriorStrength(nodeKey, priorKey, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry || !entry.keys.includes(priorKey)) return;
+  const next = Math.max(0, Math.min(100, value));
+  if(entry.method === "independent_logit_update"){
+    entry.n[priorKey] = next;
+    return;
+  }
+  entry.keys.forEach(k=>{ entry.n[k] = next; });
+}
+function setModelComputePrior(nodeKey, priorKey, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry || !entry.keys.includes(priorKey)) return;
+  const min = 0.001;
+  const keys = entry.keys;
+  const normalized = ["multinomial_logit_update","admissibility_weight_update"].includes(entry.method);
+  const max = normalized ? 1 - min*(keys.length - 1) : 0.999;
+  const next = Math.max(min, Math.min(max, value));
+  if(entry.method === "binary_logit_update"){
+    entry.prior[priorKey] = next;
+    const other = keys.find(k=>k!==priorKey);
+    if(other) entry.prior[other] = 1 - next;
+    return;
+  }
+  if(!normalized){
+    entry.prior[priorKey] = next;
+    return;
+  }
+  const others = keys.filter(k=>k!==priorKey);
+  const remaining = 1 - next;
+  const oldRemaining = others.reduce((sum,k)=>sum + Math.max(min, entry.prior[k] || min), 0);
+  entry.prior[priorKey] = next;
+  others.forEach(k=>{
+    entry.prior[k] = oldRemaining ? Math.max(min, (entry.prior[k] || min) / oldRemaining * remaining) : remaining / others.length;
+  });
+}
+function refreshModelPriorInputs(nodeKey, activeKey){
+  const entry = modelComputeState[nodeKey];
+  if(!entry) return;
+  document.querySelectorAll('#tree input[data-model-prior-node]').forEach(inp=>{
+    if(inp.dataset.modelPriorNode !== nodeKey) return;
+    if(inp.dataset.modelPrior === activeKey && document.activeElement === inp) return;
+    const v = entry.prior[inp.dataset.modelPrior];
+    if(typeof v === "number") inp.value = (v*100).toFixed(1);
+  });
+}
+function refreshModelPriorStrengthInputs(nodeKey, activeKey){
+  const entry = modelComputeState[nodeKey];
+  if(!entry) return;
+  document.querySelectorAll('#tree input[data-model-prior-n-node]').forEach(inp=>{
+    if(inp.dataset.modelPriorNNode !== nodeKey) return;
+    if(inp.dataset.modelPriorN === activeKey && document.activeElement === inp) return;
+    const v = entry.n && entry.n[inp.dataset.modelPriorN];
+    if(typeof v === "number") inp.value = v.toFixed(1);
+  });
+}
+function refreshModelPriorSummary(node){
+  const nodeKey = modelComputeKeyForNode(node);
+  const el = document.getElementById(`model-prior-summary-${nodeKey}`);
+  if(!el) return;
+  el.textContent = modelEditablePrior(node).map(st=>`${st.label} ${(st.p*100).toFixed(1)}%`).join(" / ");
+}
+function refreshModelPriorStrengthSummary(node){
+  const nodeKey = modelComputeKeyForNode(node);
+  const el = document.getElementById(`model-prior-strength-summary-${nodeKey}`);
+  if(!el) return;
+  const prior = modelEditablePrior(node);
+  if(node.compute && node.compute.method === "independent_logit_update"){
+    el.textContent = prior.map(st=>`${st.label} n=${modelPriorStrength(node, st.key).toFixed(1)}`).join(" / ");
+  } else {
+    const first = prior[0];
+    el.textContent = first ? `n=${modelPriorStrength(node, first.key).toFixed(1)}` : "n=1.0";
+  }
+}
+function refreshModelComputedPosteriors(nodeKey, output){
+  const entries = output && Array.isArray(output.readings) ? output.readings : output && Array.isArray(output.states) ? output.states : [];
+  entries.forEach(st=>{
+    const el = document.getElementById(`model-post-${nodeKey}-${st.key}`);
+    if(el) el.textContent = `${(st.p*100).toFixed(1)}%`;
+  });
+}
+function modelEvidenceSourceId(ev){
+  return ev && (ev.source || ev.id) || "";
+}
+function formatSigned(v){
+  return `${v>=0?"+":""}${v.toFixed(2)}`;
+}
+function sourceAdmitted(id){
+  return !id || state[id] !== false;
+}
+function modelNodeState(node){
+  return modelComputeState[modelComputeKeyForNode(node)] || null;
+}
+function modelEvidenceIndex(node, ev){
+  const evidence = node && node.compute && Array.isArray(node.compute.evidence) ? node.compute.evidence : [];
+  return evidence.indexOf(ev);
+}
+function modelEvidenceState(node, ev){
+  const entry = modelNodeState(node);
+  const idx = modelEvidenceIndex(node, ev);
+  return entry && idx >= 0 ? entry.evidence[String(idx)] : null;
+}
+function modelEvidenceWeight(node, ev){
+  const evState = modelEvidenceState(node, ev);
+  if(evState && typeof evState.w === "number") return evState.w;
+  return ev && typeof ev.w === "number" ? ev.w : 1;
+}
+function modelEvidenceConf(node, ev){
+  const evState = modelEvidenceState(node, ev);
+  if(evState && typeof evState.conf === "number") return evState.conf;
+  return ev && typeof ev.conf === "number" ? ev.conf : 0;
+}
+function modelEvidenceBaseShift(node, ev, stateKey){
+  const evState = modelEvidenceState(node, ev);
+  if(stateKey){
+    if(evState && evState.shift && typeof evState.shift[stateKey] === "number") return evState.shift[stateKey];
+    return ev && ev.shift && typeof ev.shift[stateKey] === "number" ? ev.shift[stateKey] : undefined;
+  }
+  if(evState && typeof evState.logLR === "number") return evState.logLR;
+  return ev && typeof ev.logLR === "number" ? ev.logLR : undefined;
+}
+function modelEvidenceShiftKeys(node, ev){
+  const evState = modelEvidenceState(node, ev);
+  return [...new Set(Object.keys(ev && ev.shift || {}).concat(Object.keys(evState && evState.shift || {})))];
+}
+function modelChildProjectionShift(parentNode, ev, childKey, parentStateKey){
+  const evState = modelEvidenceState(parentNode, ev);
+  if(evState && evState.shifts && evState.shifts[childKey] && typeof evState.shifts[childKey][parentStateKey] === "number") return evState.shifts[childKey][parentStateKey];
+  return ev && ev.shifts && ev.shifts[childKey] && typeof ev.shifts[childKey][parentStateKey] === "number" ? ev.shifts[childKey][parentStateKey] : undefined;
+}
+function modelChildProjectionKeys(parentNode, ev){
+  const evState = modelEvidenceState(parentNode, ev);
+  return [...new Set(Object.keys(ev && ev.shifts || {}).concat(Object.keys(evState && evState.shifts || {})))];
+}
+function modelAdmissibilityStateMultiplier(node, stateKey, sourceId){
+  const entry = modelNodeState(node);
+  const stateMultipliers = entry && entry.multipliers && entry.multipliers[stateKey];
+  if(stateMultipliers){
+    if(sourceId && typeof stateMultipliers[sourceId] === "number") return stateMultipliers[sourceId];
+    if(typeof stateMultipliers.__default === "number") return stateMultipliers.__default;
+  }
+  const prior = node && node.compute && Array.isArray(node.compute.prior) ? node.compute.prior : [];
+  const st = prior.find(x=>x && x.key === stateKey);
+  if(!st) return 1;
+  if(sourceId && st.multipliers && typeof st.multipliers[sourceId] === "number") return st.multipliers[sourceId];
+  return typeof st.multiplier === "number" ? st.multiplier : 1;
+}
+function setModelEvidenceWeight(nodeKey, evIndex, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry || !entry.evidence[String(evIndex)]) return;
+  entry.evidence[String(evIndex)].w = Math.max(0, Math.min(10, value));
+}
+function setModelEvidenceConf(nodeKey, evIndex, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry || !entry.evidence[String(evIndex)]) return;
+  entry.evidence[String(evIndex)].conf = Math.max(0, Math.min(5, value));
+}
+function setModelEvidenceShift(nodeKey, evIndex, stateKey, value){
+  const entry = modelComputeState[nodeKey];
+  const evState = entry && entry.evidence[String(evIndex)];
+  if(!evState) return;
+  const next = Math.max(-10, Math.min(10, value));
+  if(stateKey === "__logLR"){
+    evState.logLR = next;
+    return;
+  }
+  if(!evState.shift) evState.shift = {};
+  evState.shift[stateKey] = next;
+}
+function setModelChildProjectionShift(nodeKey, evIndex, childKey, parentStateKey, value){
+  const entry = modelComputeState[nodeKey];
+  const evState = entry && entry.evidence[String(evIndex)];
+  if(!evState) return;
+  if(!evState.shifts) evState.shifts = {};
+  if(!evState.shifts[childKey]) evState.shifts[childKey] = {};
+  evState.shifts[childKey][parentStateKey] = Math.max(-10, Math.min(10, value));
+}
+function setModelAdmissibilityMultiplier(nodeKey, stateKey, sourceId, value){
+  const entry = modelComputeState[nodeKey];
+  if(!entry) return;
+  if(!entry.multipliers[stateKey]) entry.multipliers[stateKey] = {};
+  entry.multipliers[stateKey][sourceId || "__default"] = Math.max(0, Math.min(5, value));
+}
+function modelOverlayNumber(value, attrs, step="0.05", cls=""){
+  const attr = Object.keys(attrs).map(k=>` ${k}="${escapeAttr(attrs[k])}"`).join("");
+  return `<input class="editnum ${cls}" type="number" step="${escapeAttr(step)}" value="${Number(value).toFixed(2)}"${attr}>`;
+}
+// Child-claim inputs (ev.claim) use a separate admission namespace keyed by (parentNodeKey, ev.claim).
+// Layer 3 chips toggle this state; the engine consults claimAdmitted() before folding the child input
+// into the parent's combinator.
+function claimAdmissionKey(parentNode, claimKey){
+  if(!claimKey) return "";
+  return "__claim:" + modelComputeKeyForNode(parentNode) + "/" + claimKey;
+}
+function claimAdmitted(parentNode, claimKey){
+  const k = claimAdmissionKey(parentNode, claimKey);
+  return !k || state[k] !== false;
+}
+function setClaimAdmitted(parentNode, claimKey, admitted){
+  const k = claimAdmissionKey(parentNode, claimKey);
+  if(!k) return;
+  if(admitted){ delete state[k]; } else { state[k] = false; }
+}
+function modelNodeModifierForSource(node, output, sourceId){
+  if(!sourceId || !output || output.kind !== "source_weight_modifier") return null;
+  const modifiers = output.modifiers || {};
+  if(typeof modifiers[sourceId] !== "number") return null;
+  return modifiers[sourceId];
+}
+function modelAdmissibilityDetails(sourceId, activeNode, ev, opts){
+  // Admissibility nodes live in the consuming node's compute.admissibility block under local keys.
+  // Resolve only there — no cross-tree walk. ev.admissibility (when present) names the local key.
+  if(!sourceId || !activeNode || !activeNode.compute || !activeNode.compute.admissibility) return [];
+  const admBlock = activeNode.compute.admissibility;
+  const refKey = ev && ev.admissibility;
+  const details = [];
+  Object.keys(admBlock).forEach(localKey=>{
+    if(refKey && refKey !== localKey) return;
+    const admEntry = admBlock[localKey];
+    if(!admEntry || !Array.isArray(admEntry.appliesTo) || !admEntry.appliesTo.includes(sourceId)) return;
+    const output = computeModelPosterior(admEntry, null, opts);
+    if(!output) return;
+    const multiplier = output.modifiers && output.modifiers[sourceId];
+    if(typeof multiplier === "number") details.push({key:localKey, label:modelLabel(localKey), multiplier});
+  });
+  return details;
+}
+function modelDependenceRawShift(activeNode, ev, stateKey){
+  return modelEvidenceBaseShift(activeNode, ev, stateKey);
+}
+function modelDependenceMemberScore(activeNode, memberEv, stateKey){
+  const raw = modelDependenceRawShift(activeNode, memberEv, stateKey);
+  if(typeof raw !== "number") return null;
+  const sourceId = modelEvidenceSourceId(memberEv);
+  const admMult = modelAdmissibilityDetails(sourceId, activeNode, memberEv, null)
+    .reduce((m,d)=>m*d.multiplier, 1);
+  const w = modelEvidenceWeight(activeNode, memberEv);
+  return Math.abs(raw * admMult * w);
+}
+function modelDependenceDetails(sourceId, activeNode, ev, stateKey){
+  if(!sourceId || !activeNode || !activeNode.compute) return [];
+  const groups = Array.isArray(activeNode.compute.dependence) ? activeNode.compute.dependence : [];
+  if(!groups.length) return [];
+  const evidence = Array.isArray(activeNode.compute.evidence) ? activeNode.compute.evidence : [];
+  const details = [];
+  const seen = new Set();
+  groups.forEach(group=>{
+    if(!group || !Array.isArray(group.members) || !group.members.includes(sourceId)) return;
+    const groupKey = `${group.id || ""}|${group.members.slice().sort().join(",")}`;
+    if(seen.has(groupKey)) return;
+    seen.add(groupKey);
+    const admittedMembers = group.members.filter(id=>sourceAdmitted(id) && evidence.some(x=>modelEvidenceSourceId(x) === id));
+    if(admittedMembers.length <= 1) return;
+    const method = group.method || "dominant_plus_residual";
+    if(method !== "dominant_plus_residual") return;
+    let dominant = null;
+    let dominantScore = -1;
+    admittedMembers.forEach(id=>{
+      const memberEv = evidence.find(x=>modelEvidenceSourceId(x) === id);
+      const score = modelDependenceMemberScore(activeNode, memberEv, stateKey);
+      if(typeof score !== "number") return;
+      if(score > dominantScore){
+        dominant = id;
+        dominantScore = score;
+      }
+    });
+    if(!dominant) return;
+    const residual = typeof group.residual === "number"
+      ? group.residual
+      : typeof group.share === "number" ? 1 - group.share : 0.2;
+    const multiplier = sourceId === dominant ? 1 : Math.max(0, Math.min(1, residual));
+    if(Math.abs(multiplier - 1) >= 0.005){
+      details.push({
+        key:group.id || "dependence",
+        label:modelLabel(group.id || "dependence"),
+        multiplier,
+        why:group.why || ""
+      });
+    }
+  });
+  return details;
+}
+function modelEvidenceMultiplier(node, ev, stateKey, opts){
+  const sourceId = modelEvidenceSourceId(ev);
+  const details = [];
+  const w = modelEvidenceWeight(node, ev);
+  if(Math.abs(w - 1) >= 0.005) details.push({key:"sourceWeight", label:"source weight", multiplier:w});
+  details.push(...modelAdmissibilityDetails(sourceId, node, ev, opts));
+  details.push(...modelDependenceDetails(sourceId, node, ev, stateKey));
+  const multiplier = details.reduce((m,d)=>m*d.multiplier, 1);
+  return {sourceId, multiplier, details};
+}
+function modelEvidenceEffect(node, ev, stateKey, opts){
+  const info = modelEvidenceMultiplier(node, ev, stateKey, opts);
+  let base = modelEvidenceBaseShift(node, ev, stateKey);
+  if(typeof base !== "number") return {...info, base:undefined, effective:undefined};
+  // Monte Carlo: perturb base by randn() * conf (one independent draw per (ev, stateKey) pair).
+  if(opts && opts.perturb){
+    const conf = modelEvidenceConf(node, ev);
+    if(conf > 0) base = base + randn() * conf;
+  }
+  return {...info, base, effective:base*info.multiplier};
+}
+function modelEffectiveText(effect){
+  if(!effect || typeof effect.base !== "number") return "";
+  if(Math.abs(effect.multiplier - 1) < 0.005) return formatSigned(effect.base);
+  return `${formatSigned(effect.base)} ×${effect.multiplier.toFixed(2)}=${formatSigned(effect.effective)}`;
+}
+function modelModifierSummary(details){
+  return details && details.length
+    ? details.map(d=>`${d.label} ${d.multiplier.toFixed(2)}x`).join("; ")
+    : "";
+}
+function modelSourceLabels(sourceId){
+  const labels = [];
+  if(!current || !current.model) return labels;
+  walkModelNodes(current.model, (node, key)=>{
+    if(key==="root") return;
+    if((node.evidence || []).includes(sourceId)) labels.push(modelLabel(key));
+  });
+  return [...new Set(labels)];
+}
+function modelOutputKind(node){
+  const out = node && node.output;
+  if(typeof out === "string") return out;
+  return (out && out.kind) || "untyped_output";
+}
+function modelOutputLabel(kind){
+  return String(kind || "output").replace(/_/g, " ");
+}
+// Cross-shape mapping: derive a per-child-key posterior level m[k] from a child node.
+// Computed Update Nodes provide posteriors; static distributions can be consumed during migration.
+function posteriorSignalFromEntries(entries){
+  if(!Array.isArray(entries)) return null;
+  const u = {};
+  entries.forEach(st=>{ if(st && typeof st.p === "number" && st.key) u[st.key] = st.p; });
+  return Object.keys(u).length ? u : null;
+}
+function childPosteriorSignal(childNode, childOutput){
+  if(!childNode || !childOutput) return null;
+  const method = childNode.compute && childNode.compute.method;
+  if(method === "binary_logit_update"){
+    return posteriorSignalFromEntries(childOutput.states);
+  }
+  if(method === "multinomial_logit_update"){
+    return posteriorSignalFromEntries(childOutput.states);
+  }
+  if(method === "independent_logit_update"){
+    return posteriorSignalFromEntries(childOutput.readings);
+  }
+  if(method === "admissibility_weight_update") return null;
+  return posteriorSignalFromEntries(childOutput.states)
+    || posteriorSignalFromEntries(childOutput.readings)
+    || posteriorSignalFromEntries(childNode.branches)
+    || posteriorSignalFromEntries(childNode.readings);
+}
+function modelClaimNodeFor(parentNode, claimKey, opts){
+  if(parentNode && parentNode.children && parentNode.children[claimKey]) return parentNode.children[claimKey];
+  if(opts && opts.siblingNodes && opts.siblingNodes[claimKey]) return opts.siblingNodes[claimKey];
+  return current && current.model && current.model.children ? current.model.children[claimKey] : null;
+}
+function modelClaimOutputFor(parentNode, claimKey, childOutputs, opts){
+  if(childOutputs && childOutputs[claimKey]) return childOutputs[claimKey];
+  if(opts && opts.siblingOutputs && opts.siblingOutputs[claimKey]) return opts.siblingOutputs[claimKey];
+  const childNode = modelClaimNodeFor(parentNode, claimKey, opts);
+  return childNode ? evaluateModelNode(childNode, claimKey, opts).output : null;
+}
+function computeModelPosterior(node, childOutputs, opts){
+  const spec = node && node.compute;
+  if(!spec || !["multinomial_logit_update","independent_logit_update","binary_logit_update","admissibility_weight_update"].includes(spec.method)) return null;
+  const prior = modelEditablePrior(node);
+  if(!prior.length) return null;
+  const perturb = !!(opts && opts.perturb);
+
+  // Correlation knob: post_log = (pCoef*prior_log + Σ wᵢ shiftᵢ) / (pCoef + α·W),  pCoef = 1 + α(n − 1).
+  // α=0 → numerator only, denominator 1 → pure additive accumulation (independent Bayes).
+  // α=1 → (n·prior_log + Σ w shift)/(n + W) → opinion pooling. W = total admitted evidence weight.
+  const alpha = modelCorr(node);
+
+  if(spec.method === "binary_logit_update"){
+    const positive = prior.find(st=>st.positive) || prior[0];
+    if(!positive) return null;
+    const priorN = modelPriorStrength(node, positive.key);
+    const pCoef = 1 + alpha * (priorN - 1);
+    let priorLog = priorN === 0 ? 0 : logit(Math.max(1e-9, Math.min(1 - 1e-9, positive.p)));
+    if(perturb && priorN > 0) priorLog += randn() / Math.sqrt(priorN);
+    let num = pCoef * priorLog;
+    let W = 0;
+    (spec.evidence || []).forEach(ev=>{
+      const w = modelEvidenceWeight(node, ev);
+      if(ev.claim){
+        if(!claimAdmitted(node, ev.claim)) return;
+        const childNode = modelClaimNodeFor(node, ev.claim, opts);
+        const childOutput = modelClaimOutputFor(node, ev.claim, childOutputs, opts);
+        const u = childPosteriorSignal(childNode, childOutput);
+        if(!u) return;
+        let contribution = 0;
+        let any = false;
+        modelChildProjectionKeys(node, ev).forEach(childKey=>{
+          const mk = u[childKey];
+          if(typeof mk !== "number") return;
+          const baseShift = modelChildProjectionShift(node, ev, childKey, positive.key);
+          if(typeof baseShift !== "number") return;
+          contribution += mk * baseShift;
+          any = true;
+        });
+        if(any){ num += w * contribution; W += w; }
+        return;
+      }
+      const effect = modelEvidenceEffect(node, ev, undefined, opts);
+      if(!sourceAdmitted(effect.sourceId)) return;
+      if(typeof effect.effective === "number"){ num += effect.effective; W += w; }
+    });
+    const denom = pCoef + alpha * W;
+    const p = sigmoid(denom > 0 ? num / denom : num);
+    return {states:prior.map(st=>({...st, p:st.key===positive.key ? p : 1-p, computed:true}))};
+  }
+
+  const independent = spec.method === "independent_logit_update";
+  const logs = {};       // numerator per key: pCoef·prior_log + Σ wᵢ shiftᵢ[k]
+  const pCoefK = {};     // prior coefficient per key
+  const Wk = {};         // per-reading admitted weight (independent only)
+  prior.forEach(st=>{
+    const n0 = modelPriorStrength(node, st.key);
+    pCoefK[st.key] = 1 + alpha * (n0 - 1);
+    const p = Math.max(1e-9, Math.min(1 - 1e-9, st.p));
+    let lp = n0 === 0 ? 0 : independent ? logit(p) : Math.log(p);
+    if(perturb && n0 > 0) lp += randn() / Math.sqrt(n0);
+    logs[st.key] = pCoefK[st.key] * lp;
+    Wk[st.key] = 0;
+  });
+  let Wshared = 0;       // shared admitted weight (multinomial / admissibility)
+
+  (spec.evidence || []).forEach(ev=>{
+    const w = modelEvidenceWeight(node, ev);
+    const touched = {};
+    if(ev.claim){
+      if(!claimAdmitted(node, ev.claim)) return;
+      const childNode = modelClaimNodeFor(node, ev.claim, opts);
+      const childOutput = modelClaimOutputFor(node, ev.claim, childOutputs, opts);
+      const u = childPosteriorSignal(childNode, childOutput);
+      if(!u) return;
+      modelChildProjectionKeys(node, ev).forEach(childKey=>{
+        const mk = u[childKey];
+        if(typeof mk !== "number") return;
+        prior.forEach(parent=>{
+          const baseShift = modelChildProjectionShift(node, ev, childKey, parent.key);
+          if(typeof baseShift === "number" && Object.prototype.hasOwnProperty.call(logs, parent.key)){
+            logs[parent.key] += w * mk * baseShift;
+            touched[parent.key] = true;
+          }
+        });
+      });
+    } else {
+      const sourceId = modelEvidenceSourceId(ev);
+      if(!sourceAdmitted(sourceId)) return;
+      modelEvidenceShiftKeys(node, ev).forEach(k=>{
+        const effect = modelEvidenceEffect(node, ev, k, opts);
+        if(Object.prototype.hasOwnProperty.call(logs, k) && typeof effect.effective === "number"){
+          logs[k] += effect.effective;
+          touched[k] = true;
+        }
+      });
+    }
+    const keysTouched = Object.keys(touched);
+    if(!keysTouched.length) return;
+    if(independent){ keysTouched.forEach(k=>{ Wk[k] += w; }); }
+    else { Wshared += w; }
+  });
+
+  if(spec.method === "independent_logit_update"){
+    return {readings:prior.map(st=>{
+      const denom = pCoefK[st.key] + alpha * Wk[st.key];
+      const v = denom > 0 ? logs[st.key] / denom : logs[st.key];
+      return {...st, p:sigmoid(v), computed:true};
+    })};
+  }
+  // multinomial / admissibility: shared denominator (priorN shared → pCoef uniform), so dividing is
+  // a temperature on the softmax — pooling flattens the distribution, accumulation sharpens it.
+  const sharedDenom = pCoefK[prior[0].key] + alpha * Wshared;
+  const scaled = {};
+  prior.forEach(st=>{ scaled[st.key] = sharedDenom > 0 ? logs[st.key] / sharedDenom : logs[st.key]; });
+  const maxLog = Math.max(...prior.map(st=>scaled[st.key]));
+  const weights = prior.map(st=>Math.exp(scaled[st.key] - maxLog));
+  const total = weights.reduce((a,b)=>a+b, 0) || 1;
+  const states = prior.map((st,i)=>({...st, p:weights[i]/total, computed:true}));
+  if(spec.method === "admissibility_weight_update"){
+    const targets = node.appliesTo || [];
+    const modifiers = {};
+    targets.forEach(id=>{
+      modifiers[id] = states.reduce((sum, st)=>{
+        const m = modelAdmissibilityStateMultiplier(node, st.key, id);
+        return sum + st.p*m;
+      }, 0);
+    });
+    return {states, modifiers};
+  }
+  return {states};
+}
+function normalizeModelOutput(node, childOutputs, opts){
+  let out = node.output || {};
+  if(typeof out === "string") out = {kind:out};
+  out = {...out, kind:out.kind || modelOutputKind(node)};
+  const computedOutput = computeModelPosterior(node, childOutputs, opts);
+  if(computedOutput) out = {...out, ...computedOutput, computed:true, computeMethod:node.compute.method};
+  if(node.children && childOutputs.netBenefit && childOutputs.netBenefit.kind==="net_benefit_distribution"){
+    return {...out, ...childOutputs.netBenefit};
+  }
+  return out;
+}
+function evaluateModelNode(node, key="root", opts, path=[]){
+  const childOutputs = {};
+  const kids = modelChildren(node);
+  modelPreferredKeys(kids).forEach(k=>{
+    const childOpts = {...(opts || {}), siblingOutputs:childOutputs, siblingNodes:kids};
+    childOutputs[k] = evaluateModelNode(kids[k], k, childOpts, path.concat(k)).output;
+  });
+  const output = normalizeModelOutput(node, childOutputs, opts);
+  // MC sample collection: when opts.samples is provided, record per-state probabilities for this node.
+  if(opts && opts.samples){
+    const pathKey = modelPathKey(key, path);
+    if(!opts.samples[pathKey]) opts.samples[pathKey] = {};
+    const entries = Array.isArray(output.readings) ? output.readings
+                  : Array.isArray(output.states)  ? output.states  : [];
+    entries.forEach(st=>{
+      if(typeof st.p !== "number") return;
+      if(!opts.samples[pathKey][st.key]) opts.samples[pathKey][st.key] = [];
+      opts.samples[pathKey][st.key].push(st.p);
+    });
+  }
+  return {key, node, childOutputs, output};
+}
+// Cached MC results — invalidated whenever the source-admit overlay or any editable prior changes.
+// runTypedTreeMC is the expensive part (~5000 perturbed tree evaluations); cache results so a render
+// pass that touches the tree multiple times pays for it only once.
+let typedTreeMcCache = null;
+let typedTreeMcCacheKey = null;
+function getTypedTreeMC(){
+  if(!current || !current.model) return null;
+  const cacheKey = (currentKey || "") + "|" + JSON.stringify(state) + "|" + JSON.stringify(modelComputeState);
+  if(typedTreeMcCache && typedTreeMcCacheKey === cacheKey) return typedTreeMcCache;
+  typedTreeMcCache = runTypedTreeMC(current.model, 5000);
+  typedTreeMcCacheKey = cacheKey;
+  return typedTreeMcCache;
+}
+function invalidateTypedTreeMC(){
+  typedTreeMcCache = null;
+  typedTreeMcCacheKey = null;
+}
+function formatCIBand(ci){
+  if(!ci || typeof ci.lo !== "number" || typeof ci.hi !== "number") return "";
+  return `${(ci.lo*100).toFixed(0)}–${(ci.hi*100).toFixed(0)}%`;
+}
+function modelCILookup(nodeKey, stateKey){
+  const mc = getTypedTreeMC();
+  if(!mc || !mc[nodeKey]) return null;
+  return mc[nodeKey][stateKey] || null;
+}
+// Run Monte Carlo over the typed tree: N perturbed evaluations, collect per-state samples per node path,
+// then derive 5th/95th percentile credible intervals. Returns { pathKey: { stateKey: {lo, hi} } }.
+// Perturbation: positive-strength prior logs are perturbed by randn() * (1/sqrt(n)); each source shift base is perturbed by randn() * conf.
+// Child-claim baseShifts are not perturbed directly — child posteriors are recomputed under perturbation each
+// sample, so child uncertainty propagates through the cross-shape mapping automatically.
+function runTypedTreeMC(rootNode, N){
+  if(!rootNode) return {};
+  const samples = {};
+  const iters = typeof N === "number" && N > 0 ? N : 5000;
+  for(let i=0; i<iters; i++){
+    evaluateModelNode(rootNode, "root", {perturb:true, samples}, []);
+  }
+  const ci = {};
+  Object.keys(samples).forEach(pathKey=>{
+    ci[pathKey] = {};
+    Object.keys(samples[pathKey]).forEach(stateKey=>{
+      const arr = samples[pathKey][stateKey].slice().sort((a,b)=>a-b);
+      if(!arr.length) return;
+      const lo = arr[Math.floor(arr.length * 0.05)];
+      const hi = arr[Math.floor(arr.length * 0.95)];
+      ci[pathKey][stateKey] = {lo, hi};
+    });
+  });
+  return ci;
+}
+function modelList(items){
+  return items && items.length ? `<ul>${items.map(x=>`<li>${typeof x==="string" ? x : x.label || x.key}</li>`).join("")}</ul>` : "";
+}
+function modelDrugRows(byDrug){
+  if(!byDrug) return "";
+  return `<ul>${Object.keys(byDrug).map(drug=>{
+    const d = byDrug[drug], bits = [];
+    if(d.cdrsbDelta!==undefined) bits.push(`CDR-SB ${d.cdrsbDelta}`);
+    if(d.iadrsDelta!==undefined) bits.push(`iADRS +${d.iadrsDelta}`);
+    if(d.horizon) bits.push(d.horizon);
+    return `<li><b>${drug}</b>: ${bits.join(" / ")}</li>`;
+  }).join("")}</ul>`;
+}
+function modelStateLabel(node, key){
+  const states = []
+    .concat(node.compute && Array.isArray(node.compute.prior) ? node.compute.prior : [])
+    .concat(node.output && Array.isArray(node.output.states) ? node.output.states : []);
+  const found = states.find(x=>x && x.key===key);
+  return found ? found.label : key;
+}
+function modelShiftText(node, shift){
+  return Object.keys(shift || {}).map(k=>{
+    const v = shift[k];
+    return `${modelStateLabel(node, k)} ${v>=0?"+":""}${v.toFixed(2)}`;
+  }).join("; ");
+}
+function modelEvidenceShiftText(node, ev){
+  if(typeof modelEvidenceBaseShift(node, ev, undefined) === "number"){
+    const effect = modelEvidenceEffect(node, ev);
+    const mods = modelModifierSummary(effect.details);
+    return `log-LR ${modelEffectiveText(effect)}${mods ? ` (${mods})` : ""}`;
+  }
+  const shift = modelEvidenceShiftKeys(node, ev).map(k=>{
+    const effect = modelEvidenceEffect(node, ev, k);
+    return `${modelStateLabel(node, k)} ${modelEffectiveText(effect)}`;
+  }).join("; ");
+  const details = modelEvidenceMultiplier(node, ev).details;
+  const mods = modelModifierSummary(details);
+  return `${shift}${mods ? ` (${mods})` : ""}`;
+}
+function modelComputeEvidence(node, id){
+  return node.compute && Array.isArray(node.compute.evidence)
+    ? node.compute.evidence.find(ev=>modelEvidenceSourceId(ev)===id)
+    : null;
+}
+function modelComputeDetails(node){
+  const spec = node.compute;
+  if(!spec || !["multinomial_logit_update","independent_logit_update","binary_logit_update","admissibility_weight_update"].includes(spec.method)) return "";
+  const nodeKey = modelComputeKeyForNode(node);
+  const prior = modelEditablePrior(node).map(st=>`${st.label} ${(st.p*100).toFixed(1)}%`).join(" / ");
+  const recipe = spec.method === "admissibility_weight_update"
+    ? "Start from source-weight states, update them from provenance evidence, then derive an effective multiplier for each downstream source."
+    : spec.method === "binary_logit_update"
+    ? "Start from the positive proposition's prior, add admitted source log-LRs, then convert with sigmoid; the complement is 1 minus that posterior."
+    : spec.method === "independent_logit_update"
+      ? "Start from each reading's prior, add admitted source shifts to that reading's logit, then convert with sigmoid. Readings are not normalized and need not sum to 100%."
+      : "Start from the prior, add admitted source shifts to each state logit, then softmax-normalize.";
+  return `
+    <div class="model-caption"><b>Computation:</b> ${spec.method.replace(/_/g, " ")}. ${recipe}</div>
+    <div class="model-caption"><b>Prior:</b> <span id="model-prior-summary-${escapeAttr(nodeKey)}">${prior}</span></div>
+    <div class="model-caption"><b>Prior strength:</b> <span id="model-prior-strength-summary-${escapeAttr(nodeKey)}">${spec.method === "independent_logit_update" ? modelEditablePrior(node).map(st=>`${st.label} n=${modelPriorStrength(node, st.key).toFixed(1)}`).join(" / ") : `n=${(modelEditablePrior(node)[0] ? modelPriorStrength(node, modelEditablePrior(node)[0].key) : 1).toFixed(1)}`}</span></div>
+    <div class="model-caption model-corr"><b>Source correlation α:</b>
+      <input class="editnum" type="number" min="0" max="1" step="0.05" data-model-corr-node="${escapeAttr(nodeKey)}" value="${modelCorr(node).toFixed(2)}">
+      <span id="model-corr-hint-${escapeAttr(nodeKey)}" class="corr-hint">${modelCorrHint(modelCorr(node))}</span>
+    </div>`;
+}
+function modelAdmissibilityOutputSummary(node, output){
+  if(!output || output.kind !== "source_weight_modifier" || !output.modifiers) return "";
+  const targets = node.appliesTo || Object.keys(output.modifiers);
+  if(!targets.length) return "";
+  const parts = targets.map(id=>`<span>${id} <b>${(output.modifiers[id] ?? 1).toFixed(2)}x</b></span>`).join("");
+  return `<div class="model-note"><b>Effective source-weight modifiers:</b> ${parts}<br>These numbers multiply the affected source's downstream log-LR or state shift.</div>`;
+}
+function renderModelSourceChip(node, ev, stateKey){
+  const effect = modelEvidenceEffect(node, ev, stateKey);
+  if(typeof effect.base !== "number") return "";
+  const nodeKey = modelComputeKeyForNode(node);
+  const evIndex = modelEvidenceIndex(node, ev);
+  const cls = effect.effective >= 0 ? "lr-pos" : "lr-neg";
+  const s = sourceById(effect.sourceId);
+  const mods = modelModifierSummary(effect.details);
+  const title = [s ? s.title : "", ev.why || "", mods ? `modifiers: ${mods}` : ""].filter(Boolean).join(" - ");
+  const shiftKey = stateKey || "__logLR";
+  const shiftLabel = stateKey ? "shift" : "log-LR";
+  const shiftInput = modelOverlayNumber(effect.base, {
+    "min":"-10", "max":"10",
+    "data-model-ev-node":nodeKey,
+    "data-model-ev-index":evIndex,
+    "data-model-ev-shift":shiftKey
+  });
+  const weightInput = modelOverlayNumber(modelEvidenceWeight(node, ev), {
+    "min":"0", "max":"10",
+    "data-model-ev-node":nodeKey,
+    "data-model-ev-index":evIndex,
+    "data-model-ev-weight":"1"
+  }, "0.05");
+  const confInput = modelOverlayNumber(modelEvidenceConf(node, ev), {
+    "min":"0", "max":"5",
+    "data-model-ev-node":nodeKey,
+    "data-model-ev-index":evIndex,
+    "data-model-ev-conf":"1"
+  }, "0.05");
+  return `<span class="evchip ${sourceAdmitted(effect.sourceId) ? "" : "off"}" data-evid="${effect.sourceId}" title="${escapeAttr(title)}">
+    <b>${effect.sourceId}</b>
+    <span class="overlay-mini">${shiftLabel} <span class="${cls}">${shiftInput}</span></span>
+    <span class="overlay-mini w">w ${weightInput}</span>
+    <span class="overlay-mini sigma">σ ${confInput}</span>
+    ${Math.abs(effect.multiplier-1)>=0.005 ? `<span class="model-modifier">×${effect.multiplier.toFixed(2)}=${formatSigned(effect.effective)}</span>` : ""}
+  </span>`;
+}
+function renderModelChildWeightInput(parentNode, ev){
+  const nodeKey = modelComputeKeyForNode(parentNode);
+  const evIndex = modelEvidenceIndex(parentNode, ev);
+  return modelOverlayNumber(modelEvidenceWeight(parentNode, ev), {
+    "min":"0", "max":"10",
+    "data-model-ev-node":nodeKey,
+    "data-model-ev-index":evIndex,
+    "data-model-ev-weight":"1"
+  }, "0.05");
+}
+function renderAdmissibilityMultiplierRow(node, st){
+  if(!node || !node.compute || node.compute.method !== "admissibility_weight_update") return "";
+  const targets = node.appliesTo || [];
+  if(!targets.length) return "";
+  const nodeKey = modelComputeKeyForNode(node);
+  return `<div class="model-mult-row"><span>state multipliers</span>${targets.map(id=>{
+    const value = modelAdmissibilityStateMultiplier(node, st.key, id);
+    const input = modelOverlayNumber(value, {
+      "min":"0", "max":"5",
+      "data-model-adm-mult-node":nodeKey,
+      "data-model-adm-mult-state":st.key,
+      "data-model-adm-mult-source":id
+    }, "0.05");
+    return `<span class="model-mult-pill"><b>${id}</b> ${input}x</span>`;
+  }).join("")}</div>`;
+}
+function modelComputedBinaryBlock(node, output){
+  const spec = node.compute;
+  const prior = modelEditablePrior(node);
+  const positive = prior.find(st=>st.positive) || prior[0];
+  const result = output && Array.isArray(output.states) ? output.states.find(st=>st.key===positive.key) : null;
+  if(!positive || !result) return "";
+  const nodeKey = modelComputeKeyForNode(node);
+  const evidence = spec.evidence || [];
+  const admittedShift = evidence.reduce((sum, ev)=>{
+    if(ev && ev.claim){
+      if(!claimAdmitted(node, ev.claim)) return sum;
+      return sum + childClaimContribution(node, ev, positive.key);
+    }
+    const effect = modelEvidenceEffect(node, ev);
+    return sum + (sourceAdmitted(effect.sourceId) && typeof effect.effective === "number" ? effect.effective : 0);
+  }, 0);
+  const sourceChips = evidence.map(ev=>{
+    if(ev && ev.claim) return renderChildClaimChip(node, ev, positive.key);
+    return renderModelSourceChip(node, ev);
+  }).join("");
+  const ciBand = formatCIBand(modelCILookup(nodeKey, positive.key));
+  return `
+    <div class="treeconn"><div class="bar"></div></div>
+    <div class="gatenode" style="max-width:520px;text-align:center">
+      <div class="g-op">BINARY LOGIT · prior plus admitted source log-LRs</div>
+      <div class="g-warr">This is the same premise-update template as the binary BN blocks; the second state is the complement.</div>
+    </div>
+    <div class="treeconn"><div class="bar"></div></div>
+    <div class="tree-prem"><div class="pnode" style="border-top-color:${result.color || "#475569"}">
+      <div class="p-lab">${positive.key} · ${positive.label}</div>
+      <div class="p-row">
+        prior <input class="editnum" type="number" min="0.1" max="99.9" step="0.1" data-model-prior-node="${escapeAttr(nodeKey)}" data-model-prior="${escapeAttr(positive.key)}" value="${(positive.p*100).toFixed(1)}">
+        strength <input class="editnum" type="number" min="0" max="100" step="0.1" data-model-prior-n-node="${escapeAttr(nodeKey)}" data-model-prior-n="${escapeAttr(positive.key)}" value="${modelPriorStrength(node, positive.key).toFixed(1)}">
+        <span class="p-post">P=<span id="model-post-${escapeAttr(nodeKey)}-${escapeAttr(positive.key)}">${(result.p*100).toFixed(1)}%</span>${ciBand ? `<span class="p-ci">[${ciBand}]</span>` : ""}</span>
+      </div>
+      <div class="p-why">Admitted log-LRs sum to ${admittedShift>=0?"+":""}${admittedShift.toFixed(2)} for this proposition; the complement is updated as 1 - P.</div>
+      <div class="evrow">${sourceChips}</div>
+    </div></div>
+    ${renderEmbeddedAdmissibility(node)}`;
+}
+// Effective contribution of a child-claim evidence entry to a given parent state/reading.
+// Returns posterior × baseShift summed across the entry's shifts map. Zero if the child is not consumable or
+// the projection for this parent state is missing. Used both to render the child-claim chip's number
+// and to roll up the parent's "admitted shifts sum" line.
+function childClaimContribution(parentNode, ev, parentStateKey){
+  if(!ev || !ev.claim || !parentStateKey) return 0;
+  const childNode = modelClaimNodeFor(parentNode, ev.claim);
+  if(!childNode) return 0;
+  const childResult = evaluateModelNode(childNode, ev.claim);
+  const u = childPosteriorSignal(childNode, childResult.output);
+  if(!u) return 0;
+  const w = modelEvidenceWeight(parentNode, ev);
+  let contribution = 0;
+  modelChildProjectionKeys(parentNode, ev).forEach(childKey=>{
+    const mk = u[childKey];
+    if(typeof mk !== "number") return;
+    const baseShift = modelChildProjectionShift(parentNode, ev, childKey, parentStateKey);
+    if(typeof baseShift === "number") contribution += w * mk * baseShift;
+  });
+  return contribution;
+}
+function modelChildSignalEntries(childNode, childOutput){
+  const signal = childPosteriorSignal(childNode, childOutput);
+  if(!signal) return [];
+  const defs = []
+    .concat(childNode && childNode.compute && Array.isArray(childNode.compute.prior) ? childNode.compute.prior : [])
+    .concat(childOutput && Array.isArray(childOutput.states) ? childOutput.states : [])
+    .concat(childOutput && Array.isArray(childOutput.readings) ? childOutput.readings : [])
+    .concat(childNode && Array.isArray(childNode.branches) ? childNode.branches : [])
+    .concat(childNode && Array.isArray(childNode.readings) ? childNode.readings : []);
+  return Object.keys(signal).map(key=>{
+    const found = defs.find(x=>x && x.key === key) || {};
+    return {key, label:found.label || key, color:found.color, p:signal[key]};
+  });
+}
+function renderChildProjectionTables(parentNode, output){
+  const spec = parentNode && parentNode.compute;
+  if(!spec || !Array.isArray(spec.evidence)) return "";
+  const childEvidence = spec.evidence.filter(ev=>ev && ev.claim && modelChildProjectionKeys(parentNode, ev).length);
+  if(!childEvidence.length) return "";
+  const parentStates = modelEditablePrior(parentNode);
+  if(!parentStates.length) return "";
+  const blocks = childEvidence.map(ev=>{
+    const childNode = modelClaimNodeFor(parentNode, ev.claim);
+    if(!childNode) return "";
+    const childResult = evaluateModelNode(childNode, ev.claim);
+    const childEntries = modelChildSignalEntries(childNode, childResult.output);
+    if(!childEntries.length) return "";
+    const w = modelEvidenceWeight(parentNode, ev);
+    const evIndex = modelEvidenceIndex(parentNode, ev);
+    const parentNodeKey = modelComputeKeyForNode(parentNode);
+    const rows = childEntries.map(child=>{
+      const cells = parentStates.map(parent=>{
+        const raw = modelChildProjectionShift(parentNode, ev, child.key, parent.key);
+        if(typeof raw !== "number") return `<td class="model-proj-cell"><b>0.00</b><span>no projection</span></td>`;
+        const contribution = raw * child.p * w;
+        const input = modelOverlayNumber(raw, {
+          "min":"-10", "max":"10",
+          "data-model-child-shift-node":parentNodeKey,
+          "data-model-child-shift-index":evIndex,
+          "data-model-child-shift-child":child.key,
+          "data-model-child-shift-parent":parent.key
+        });
+        return `<td class="model-proj-cell"><b>${input}</b><span>${formatSigned(contribution)} after P x w</span></td>`;
+      }).join("");
+      return `<tr>
+        <td><b>${child.label}</b><span class="model-proj-p">P=${(child.p*100).toFixed(1)}%</span></td>
+        ${cells}
+      </tr>`;
+    }).join("");
+    return `<div class="model-proj-block">
+      <div class="model-proj-title">
+        <span class="model-adm-tag">CHILD UPDATE</span>
+        <span class="model-proj-name">${modelLabel(ev.claim)}</span>
+        <span class="model-adm-applies">input weight ${renderModelChildWeightInput(parentNode, ev)}x</span>
+      </div>
+      ${ev.why ? `<div class="model-caption">${ev.why}</div>` : ""}
+      <table class="model-proj-table">
+        <thead><tr><th>child state</th>${parentStates.map(st=>`<th>${st.label}</th>`).join("")}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).filter(Boolean).join("");
+  if(!blocks) return "";
+  return `<div class="model-proj-section">
+    <div class="model-proj-head"><b>Child projection tables</b> - each cell shows raw parent shift, then this child's current weighted contribution.</div>
+    ${blocks}
+  </div>`;
+}
+// Render a child-claim chip. Click toggles admission via the state overlay; the projection's effective
+// contribution to the current parent state/reading is shown as a signed number.
+function renderChildClaimChip(parentNode, ev, parentStateKey){
+  if(!ev || !ev.claim) return "";
+  const contribution = childClaimContribution(parentNode, ev, parentStateKey);
+  const admitted = claimAdmitted(parentNode, ev.claim);
+  const cls = contribution >= 0 ? "lr-pos" : "lr-neg";
+  const stateOverlayKey = claimAdmissionKey(parentNode, ev.claim);
+  const title = ev.why ? `child claim: ${ev.claim} — ${ev.why}` : `child claim: ${ev.claim}`;
+  return `<span class="evchip evchip-claim ${admitted ? "" : "off"}" data-claim-state="${escapeAttr(stateOverlayKey)}" data-claim-target="${escapeAttr(ev.claim)}" title="${escapeAttr(title)}"><b>↳${ev.claim}</b> <span class="${cls}">${formatSigned(contribution)}</span><span class="overlay-mini w">w ${renderModelChildWeightInput(parentNode, ev)}</span></span>`;
+}
+// Render any compute.admissibility[*] entries as inline sub-blocks within the consuming node's Layer 2.
+// Each embedded admissibility entry is rendered with the same state-blocks machinery as a regular
+// admissibility_weight_update node, just nested visually under the consumer.
+function renderEmbeddedAdmissibility(parentNode){
+  const adm = parentNode && parentNode.compute && parentNode.compute.admissibility;
+  if(!adm || typeof adm !== "object") return "";
+  const keys = Object.keys(adm);
+  if(!keys.length) return "";
+  const blocks = keys.map(localKey=>{
+    const admNode = adm[localKey];
+    if(!admNode || !admNode.compute) return "";
+    const output = computeModelPosterior(admNode, null);
+    const inner = modelComputedStateBlocks(admNode, output);
+    const targets = Array.isArray(admNode.appliesTo) ? admNode.appliesTo : [];
+    return `
+      <div class="model-adm-block">
+        <div class="model-adm-head">
+          <span class="model-adm-tag">ADMISSIBILITY</span>
+          <span class="model-adm-name">${modelLabel(localKey)}</span>
+          ${targets.length ? `<span class="model-adm-applies">applies to ${targets.map(id=>`<b>${id}</b>`).join(", ")}</span>` : ""}
+        </div>
+        ${inner}
+      </div>`;
+  }).join("");
+  return `
+    <div class="model-adm-section">
+      <div class="model-adm-section-head"><b>Source-weight admissibility</b> — these modify how strongly named sources count in this node.</div>
+      ${blocks}
+    </div>`;
+}
+function modelComputedStateBlocks(node, output){
+  const spec = node.compute;
+  if(!spec || !["multinomial_logit_update","independent_logit_update","binary_logit_update","admissibility_weight_update"].includes(spec.method)) return "";
+  if(spec.method === "binary_logit_update") return modelComputedBinaryBlock(node, output);
+  const independent = spec.method === "independent_logit_update";
+  const nodeKey = modelComputeKeyForNode(node);
+  const entries = output && Array.isArray(independent ? output.readings : output.states)
+    ? (independent ? output.readings : output.states)
+    : [];
+  if(!entries.length) return "";
+  const evidence = spec.evidence || [];
+  const priorByKey = {};
+  modelEditablePrior(node).forEach(st=>{ priorByKey[st.key] = st; });
+  const blocks = entries.map(st=>{
+    const prior = priorByKey[st.key] || st;
+    const sourceChips = evidence.map(ev=>{
+      if(ev && ev.claim) return renderChildClaimChip(node, ev, st.key);
+      return renderModelSourceChip(node, ev, st.key);
+    }).join("");
+    const admittedShift = evidence.reduce((sum, ev)=>{
+      if(ev && ev.claim){
+        if(!claimAdmitted(node, ev.claim)) return sum;
+        return sum + childClaimContribution(node, ev, st.key);
+      }
+      const effect = modelEvidenceEffect(node, ev, st.key);
+      return sum + (sourceAdmitted(effect.sourceId) && typeof effect.effective === "number" ? effect.effective : 0);
+    }, 0);
+    const ciBand = formatCIBand(modelCILookup(nodeKey, st.key));
+    return `<div class="pnode" style="border-top-color:${st.color || "#475569"}">
+      <div class="p-lab">${st.key} · ${st.label}</div>
+      <div class="p-row">
+        prior <input class="editnum" type="number" min="0.1" max="99.9" step="0.1" data-model-prior-node="${escapeAttr(nodeKey)}" data-model-prior="${escapeAttr(st.key)}" value="${(prior.p*100).toFixed(1)}">
+        strength <input class="editnum" type="number" min="0" max="100" step="0.1" data-model-prior-n-node="${escapeAttr(nodeKey)}" data-model-prior-n="${escapeAttr(st.key)}" value="${modelPriorStrength(node, st.key).toFixed(1)}">
+        <span class="p-post">P=<span id="model-post-${escapeAttr(nodeKey)}-${escapeAttr(st.key)}">${(st.p*100).toFixed(1)}%</span>${ciBand ? `<span class="p-ci">[${ciBand}]</span>` : ""}</span>
+      </div>
+      <div class="p-why">Admitted shifts sum to ${admittedShift>=0?"+":""}${admittedShift.toFixed(2)} for this ${independent ? "reading; its logit is updated independently from the other readings." : "state; the four state scores then compete in the shared softmax."}</div>
+      <div class="evrow">${sourceChips}</div>
+      ${renderAdmissibilityMultiplierRow(node, st)}
+    </div>`;
+  }).join("");
+  const gate = independent
+    ? {op:"INDEPENDENT LOGIT · update each meaning threshold separately", why:"Each block is one reading of 'meaningful'. These credences do not compete and do not need to sum to 100%."}
+    : spec.method === "admissibility_weight_update"
+      ? {op:"ADMISSIBILITY WEIGHT · infer source-weight multipliers", why:"Each block is one admissibility interpretation. The weighted average becomes a multiplier on downstream source influence."}
+      : {op:"SOFTMAX · normalize four updated state scores", why:"Each block below is one candidate output state. Source chips show the signed shift for that state only."};
+  return `
+    ${modelAdmissibilityOutputSummary(node, output)}
+    <div class="treeconn"><div class="bar"></div></div>
+    <div class="gatenode" style="max-width:520px;text-align:center">
+      <div class="g-op">${gate.op}</div>
+      <div class="g-warr">${gate.why}</div>
+    </div>
+    <div class="treeconn"><div class="bar"></div></div>
+    <div class="tree-prem">${blocks}</div>
+    ${renderChildProjectionTables(node, output)}
+    ${renderEmbeddedAdmissibility(node)}`;
+}
+function modelEntries(node, output){
+  if(output && Array.isArray(output.states) && output.states.length && typeof output.states[0] === "object"){
+    return output.states.map((x,i)=>({...x,color:x.color || MODEL_BAR_COLORS[i % MODEL_BAR_COLORS.length]}));
+  }
+  if(output && Array.isArray(output.readings) && output.readings.length && typeof output.readings[0] === "object"){
+    return output.readings.map((x,i)=>({...x,color:x.color || MODEL_BAR_COLORS[i % MODEL_BAR_COLORS.length]}));
+  }
+  if(Array.isArray(node.branches)){
+    return node.branches.map((x,i)=>({...x,color:x.color || MODEL_BAR_COLORS[i % MODEL_BAR_COLORS.length]}));
+  }
+  if(Array.isArray(node.readings) && node.readings.length && typeof node.readings[0] === "object"){
+    return node.readings.map((x,i)=>({...x,color:x.color || MODEL_BAR_COLORS[i % MODEL_BAR_COLORS.length]}));
+  }
+  return [];
+}
+function modelBars(node, output, nodeKey){
+  const entries = modelEntries(node, output).filter(x=>typeof x.p === "number");
+  if(!entries.length) return "";
+  return `<div class="model-bars">${entries.map(x=>{
+    const ci = nodeKey ? formatCIBand(modelCILookup(nodeKey, x.key)) : "";
+    return `
+    <div class="model-bar">
+      <div class="model-bar-label" title="${escapeAttr(x.label)}">${x.label}</div>
+      <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.max(0,Math.min(100,x.p*100)).toFixed(1)}%;background:${x.color}"></div></div>
+      <div class="model-bar-pct">${(x.p*100).toFixed(0)}%${ci ? `<span class="model-bar-ci">[${ci}]</span>` : ""}</div>
+    </div>`;
+  }).join("")}</div>`;
+}
+function modelStack(output){
+  const entries = output && Array.isArray(output.states) ? output.states.filter(x=>typeof x.p==="number") : [];
+  if(!entries.length) return "";
+  return `<div class="model-stack">
+    <div class="model-stack-track">${entries.map(x=>`
+      <div class="model-stack-seg" title="${escapeAttr(x.label + ' ' + (x.p*100).toFixed(0) + '%')}" style="width:${(x.p*100).toFixed(1)}%;background:${x.color || "#64748b"}"></div>
+    `).join("")}</div>
+    <div class="model-stack-labels">${entries.map(x=>`<span title="${escapeAttr(x.label)}">${x.label} ${(x.p*100).toFixed(0)}%</span>`).join("")}</div>
+  </div>`;
+}
+function modelConsumes(node){
+  const consumes = node.consumes || (node.composition && node.composition.consumes ? Object.keys(node.composition.consumes) : []);
+  if(!consumes.length) return "";
+  return `<div class="model-consumes">${consumes.map(x=>`<span>${modelLabel(x)}</span>`).join("")}</div>`;
+}
+function modelCompositionText(value, fallback="typed child outputs compose upward"){
+  if(!value) return fallback;
+  if(typeof value === "string") return value.replace(/_/g, " ");
+  if(value.method) return String(value.method).replace(/_/g, " ");
+  return fallback;
+}
+function modelContract(node, key){
+  const c = MODEL_TYPE_CONTRACTS[node.type] || {};
+  const composition = node.composition || (current.model && key==="root" ? current.model.composition : null);
+  const compText = modelCompositionText(composition, c.compose);
+  return `<div class="model-contract">
+    <b>Contract:</b> answers ${c.answers || "a typed model question"} · emits <b>${modelOutputLabel(modelOutputKind(node))}</b>${compText ? ` · composes by ${compText}` : ""}
+  </div>`;
+}
+function modelBranchDetails(key, node){
+  const chunks = [];
+  if(node.summary) chunks.push(`<div class="model-caption">${node.summary}</div>`);
+  if(node.byDrug) chunks.push(`<div class="model-caption">Observed trial-scale deltas:</div>${modelDrugRows(node.byDrug)}`);
+  if(node.estimands) chunks.push(`<div class="model-caption">Estimands:</div>${modelList(node.estimands)}`);
+  if(node.branches) chunks.push(`<div class="model-caption">Branches:</div>${modelList(node.branches)}`);
+  if(node.outcomes && !node.output) chunks.push(`<div class="model-caption">States / outcomes:</div>${modelList(node.outcomes)}`);
+  if(node.readings && (!node.readings.length || typeof node.readings[0] === "string")) chunks.push(`<div class="model-caption">Rungs:</div>${modelList(node.readings)}`);
+  if(node.modifiers) chunks.push(`<div class="model-caption">Risk modifiers:</div>${modelList(node.modifiers)}`);
+  if(node.components) chunks.push(`<div class="model-caption">Decision components:</div>${modelList(node.components)}`);
+  if(node.composition) chunks.push(`<div class="model-caption"><b>Composition:</b> ${node.composition}</div>`);
+  if(node.compute) chunks.push(modelComputeDetails(node));
+  return chunks.join("");
+}
+function modelEvidenceChips(key, node){
+  const ids = node.evidence || [];
+  if(!ids.length) return "";
+  return `<div class="model-evidence">${ids.map(id=>
+    `<span class="model-chip" id="model-ev-${key}-${id}" data-evid="${id}">${id}</span>`
+  ).join("")}</div>`;
+}
+function renderModelCard(key, result){
+  const node = result.node, output = result.output;
+  return `<div class="model-card ${node.type || ""}">
+    <div class="model-type">${modelTypeName(node.type)}</div>
+    <h4>${modelLabel(key)}</h4>
+    <p class="model-question">${node.question || ""}</p>
+    <div class="model-output">${modelOutputLabel(output.kind)}</div>
+    ${modelBars(node, output, key)}
+    ${modelBranchDetails(key, node)}
+    ${modelConsumes(node)}
+    ${modelEvidenceChips(key, node)}
+    ${modelContract(node, key)}
+  </div>`;
+}
+function modelNodeByKey(key){
+  if(!current || !current.model) return null;
+  if(key==="root") return current.model;
+  const kids = modelChildren(current.model);
+  return kids[key] || null;
+}
+function modelNodeByComputeKey(nodeKey){
+  let found = null;
+  if(!current || !current.model) return found;
+  walkModelNodes(current.model, (node, key, path)=>{
+    if(modelPathKey(key, path) === nodeKey) found = node;
+  });
+  return found;
+}
+function modelResultByKey(key){
+  const node = modelNodeByKey(key);
+  return node ? evaluateModelNode(node, key) : evaluateModelNode(current.model, "root");
+}
+function modelRootInputKeys(){
+  const kids = modelChildren(current.model);
+  const decision = kids.netBenefit;
+  if(decision && decision.consumes) return decision.consumes.filter(k=>kids[k]);
+  return modelPreferredKeys(kids).filter(k=>k!=="netBenefit");
+}
+function sourceById(id){
+  return current.sources.find(s=>s.id===id);
+}
+function modelLayer3Bars(node, output, nodeKey){
+  const entries = modelEntries(node, output).filter(x=>typeof x.p==="number");
+  if(!entries.length) return "";
+  return `<div class="model-l3-bars">${entries.map(x=>{
+    const ci = nodeKey ? formatCIBand(modelCILookup(nodeKey, x.key)) : "";
+    return `
+    <div class="model-l3-row">
+      <div title="${escapeAttr(x.label)}">${x.label}</div>
+      <div class="model-l3-track"><div class="model-l3-fill" style="width:${(x.p*100).toFixed(1)}%;background:${x.color || "#64748b"}"></div></div>
+      <div class="model-l3-pct">${(x.p*100).toFixed(0)}%${ci ? `<span class="model-l3-ci">[${ci}]</span>` : ""}</div>
+    </div>`;
+  }).join("")}</div>`;
+}
+// Short, claim-appropriate label for the root output, derived from the model rather than hardcoded.
+// Prefers an explicit model.rootLabel, else humanizes model.target (e.g. "origin_hypothesis" -> "Origin hypothesis").
+function modelRootLabel(){
+  const m = current && current.model;
+  let s = m && m.rootLabel ? m.rootLabel
+    : m && m.target ? String(m.target).replace(/_/g, " ")
+    : "root output";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function renderModelLayer3(){
+  const result = modelResultByKey(modelFocusKey);
+  const node = result.node;
+  const output = result.output;
+  const title = modelFocusKey==="root" ? `${modelRootLabel()} distribution` : modelLabel(modelFocusKey);
+  const bars = modelLayer3Bars(node, output, modelFocusKey);
+  document.getElementById("modelLayer3").innerHTML = `
+    <div class="model-l3-head">
+      <div>
+        <div class="model-l3-title">${title}</div>
+        <div class="model-l3-summary">${node.question || node.summary || ""}</div>
+      </div>
+      <div class="model-l3-kind">${modelOutputLabel(output.kind)}</div>
+    </div>
+    ${bars || `<div class="model-l3-empty">${node.summary || "This node has a typed output but no numeric state distribution yet."}</div>`}`;
+}
+function renderModelNav(){
+  const keys = modelRootInputKeys();
+  return `<div class="model-nav">
+    <button type="button" data-model-focus="root" class="${modelFocusKey==="root"?"active":""}">${modelRootLabel()}</button>
+    ${keys.map(k=>`<button type="button" data-model-focus="${k}" class="${modelFocusKey===k?"active":""}">${modelLabel(k)}</button>`).join("")}
+  </div>`;
+}
+function renderModelRootTree(){
+  const m = current.model, kids = modelChildren(m);
+  const rootResult = evaluateModelNode(m, "root");
+  const decision = kids.netBenefit || m;
+  const decisionBlocks = decision && decision.compute ? modelComputedStateBlocks(decision, rootResult.output) : "";
+  const inputs = modelRootInputKeys();
+  const inputCards = inputs.map(key=>{
+    const result = evaluateModelNode(kids[key], key);
+    const node = result.node, output = result.output;
+    return `<div class="model-card model-subclaim ${node.type || ""}" data-model-focus="${key}" title="Open ${escapeAttr(modelLabel(key))}">
+      <div class="model-type">${modelTypeName(node.type)}</div>
+      <h4>${modelLabel(key)}</h4>
+      <p class="model-question">${node.question || ""}</p>
+      <div class="model-output">${modelOutputLabel(output.kind)}</div>
+      ${modelBars(node, output, key)}
+    </div>`;
+  }).join("");
+  const detail = `
+      <div class="model-card decision">
+        <div class="model-type">${modelTypeName(decision.type || "decision")}</div>
+        <h4>${modelRootLabel()}${(decision === m) ? "" : " decision"}</h4>
+        <p class="model-question">${decision.question || m.question || ""}</p>
+        <div class="model-output">${modelOutputLabel(modelOutputKind(decision))}</div>
+        <div class="model-caption"><b>Composition:</b> ${modelCompositionText(decision.composition || m.composition)}</div>
+        ${modelConsumes(decision)}
+        ${decision && decision.compute ? modelComputeDetails(decision) : ""}
+      </div>
+      ${decisionBlocks}`;
+  document.getElementById("tree").innerHTML = `
+    <div class="model-tree">
+      ${renderModelNav()}
+      <div class="model-root">
+        <div class="model-kicker">${modelTypeName(m.type)} root</div>
+        <div class="model-title">${m.question || modelRootLabel()}</div>
+        <div class="model-sub">${modelOutputLabel(rootResult.output.kind)} · ${rootResult.output.unit || rootResult.output.population || ""}</div>
+        ${modelStack(rootResult.output)}
+      </div>
+      <div class="treeconn"><div class="bar"></div></div>
+      <div class="model-branches">${inputCards}</div>
+      <div class="model-note">Layer 2 shows how the ${modelRootLabel().toLowerCase()} distribution is built from its ${inputs.length} subclaim${inputs.length===1?"":"s"}. Click any subclaim to open its own Layer 3 output and Layer 2 source path.</div>
+      ${modelDetailFold(detail)}
+    </div>`;
+  wireModelTree();
+}
+function renderModelEvidenceList(node){
+  const ids = node.evidence || [];
+  if(!ids.length) return `<div class="model-note">No node-local source ids are attached yet.</div>`;
+  return `<div class="model-evidence-list">${ids.map(id=>{
+    const s = sourceById(id);
+    if(!s) return "";
+    const ev = modelComputeEvidence(node, id);
+    return `<div class="model-evidence-item">
+      ${ev ? `<div class="model-compute-note"><b>update:</b> <span class="model-compute-shift">${modelEvidenceShiftText(node, ev)}</span>${ev.why ? ` - ${ev.why}` : ""}</div>` : ""}
+      <b>${s.id}</b> ${sourceTitle(s).replace(/^.*?<span>|<\/span>$/g,"")}
+      <span class="q">“${s.quote}”</span>
+      <div class="model-caption"><b>drift:</b> ${s.drift}</div>
+    </div>`;
+  }).join("")}</div>`;
+}
+function renderModelSubclaimTree(){
+  const result = modelResultByKey(modelFocusKey);
+  const node = result.node;
+  const computedBlocks = modelComputedStateBlocks(node, result.output);
+  document.getElementById("tree").innerHTML = `
+    <div class="model-tree">
+      ${renderModelNav()}
+      <div class="model-card ${node.type || ""}">
+        <div class="model-type">${modelTypeName(node.type)}</div>
+        <h4>${modelLabel(modelFocusKey)}</h4>
+        <p class="model-question">${node.question || ""}</p>
+        <div class="model-output">${modelOutputLabel(result.output.kind)}</div>
+        ${modelBranchDetails(modelFocusKey, node)}
+      </div>
+      <div class="treeconn"><div class="bar"></div></div>
+      <div class="model-card">
+        <div class="model-type">source path</div>
+        <h4>How this subclaim gets its result</h4>
+        <p class="model-question">These source quotes are the node-local evidence feeding the ${modelLabel(modelFocusKey)} output shown in Layer 3.</p>
+        ${renderModelEvidenceList(node)}
+      </div>
+      ${modelDetailFold(`${modelContract(node, modelFocusKey)}${computedBlocks}`)}
+    </div>`;
+  wireModelTree();
+}
+function renderModelTree(){
+  if(!modelNodeByKey(modelFocusKey)) modelFocusKey = "root";
+  if(modelFocusKey==="root") renderModelRootTree();
+  else renderModelSubclaimTree();
+}
+function refreshVisibleModelPosteriors(){
+  if(!current || !current.model) return;
+  walkModelNodes(current.model, (node, key, path)=>{
+    if(!node.compute) return;
+    const nodeKey = modelPathKey(key, path);
+    const result = evaluateModelNode(node, key);
+    refreshModelComputedPosteriors(nodeKey, result.output);
+  });
+}
+function refreshAfterModelOverlayEdit(full=false){
+  if(full) renderModelTree();
+  else refreshVisibleModelPosteriors();
+  updateModelView();
+}
+function wireModelTree(){
+  const fold = document.getElementById('modelDetailFold');
+  if(fold) fold.addEventListener('toggle', ()=>{ modelDetailOpen = fold.open; });
+  document.querySelectorAll('#tree .model-chip').forEach(ch=>{
+    ch.addEventListener('click', e=>{ e.stopPropagation(); focusCard(ch.dataset.evid); });
+  });
+  document.querySelectorAll('#tree .evchip[data-evid]').forEach(ch=>{
+    ch.addEventListener('click', e=>{ e.stopPropagation(); focusCard(ch.dataset.evid); });
+  });
+  document.querySelectorAll('#tree .evchip-claim').forEach(ch=>{
+    ch.addEventListener('click', e=>{
+      e.stopPropagation();
+      const k = ch.dataset.claimState;
+      if(!k) return;
+      if(state[k] === false) delete state[k]; else state[k] = false;
+      renderModelTree();
+      updateModelView();
+    });
+  });
+  document.querySelectorAll('#tree input[data-model-corr-node]').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('input', e=>{
+      const target = e.currentTarget;
+      const v = parseFloat(target.value);
+      if(Number.isNaN(v)) return;
+      const nodeKey = target.dataset.modelCorrNode;
+      setModelCorr(nodeKey, v);
+      const clamped = Math.max(0, Math.min(1, v));
+      const hintEl = document.getElementById(`model-corr-hint-${nodeKey}`);
+      if(hintEl) hintEl.textContent = modelCorrHint(clamped);
+      // Live, lightweight: move Layer 3 + posteriors while dragging without replacing the slider DOM.
+      const targetNode = modelNodeByComputeKey(nodeKey) || modelResultByKey(modelFocusKey).node;
+      const targetKey = nodeKey.split(".").pop();
+      const result = evaluateModelNode(targetNode, targetKey);
+      refreshModelComputedPosteriors(nodeKey, result.output);
+      updateModelView();
+    });
+    inp.addEventListener('change', ()=>{
+      // On release: full re-render (refreshes Layer 2 blocks + recomputes credible intervals).
+      renderModelTree();
+      updateModelView();
+    });
+  });
+  document.querySelectorAll('#tree input[data-model-prior]').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('input', e=>{
+      const target = e.currentTarget;
+      const v = parseFloat(target.value);
+      if(Number.isNaN(v)) return;
+      setModelComputePrior(target.dataset.modelPriorNode, target.dataset.modelPrior, v/100);
+      refreshModelPriorInputs(target.dataset.modelPriorNode, target.dataset.modelPrior);
+      const targetNode = modelNodeByComputeKey(target.dataset.modelPriorNode) || modelResultByKey(modelFocusKey).node;
+      const targetKey = target.dataset.modelPriorNode.split(".").pop();
+      const result = evaluateModelNode(targetNode, targetKey);
+      refreshModelComputedPosteriors(target.dataset.modelPriorNode, result.output);
+      refreshModelPriorSummary(targetNode);
+      refreshModelPriorStrengthSummary(targetNode);
+      updateModelView();
+    });
+    inp.addEventListener('change', ()=>{
+      renderModelTree();
+      updateModelView();
+    });
+  });
+  document.querySelectorAll('#tree input[data-model-prior-n]').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('input', e=>{
+      const target = e.currentTarget;
+      const v = parseFloat(target.value);
+      if(Number.isNaN(v)) return;
+      setModelPriorStrength(target.dataset.modelPriorNNode, target.dataset.modelPriorN, v);
+      refreshModelPriorStrengthInputs(target.dataset.modelPriorNNode, target.dataset.modelPriorN);
+      const targetNode = modelNodeByComputeKey(target.dataset.modelPriorNNode) || modelResultByKey(modelFocusKey).node;
+      const targetKey = target.dataset.modelPriorNNode.split(".").pop();
+      const result = evaluateModelNode(targetNode, targetKey);
+      refreshModelComputedPosteriors(target.dataset.modelPriorNNode, result.output);
+      refreshModelPriorStrengthSummary(targetNode);
+      updateModelView();
+    });
+    inp.addEventListener('change', ()=>{
+      renderModelTree();
+      updateModelView();
+    });
+  });
+  document.querySelectorAll('#tree input[data-model-ev-shift], #tree input[data-model-ev-weight], #tree input[data-model-ev-conf], #tree input[data-model-child-shift-parent], #tree input[data-model-adm-mult-source]').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('input', e=>{
+      const target = e.currentTarget;
+      const v = parseFloat(target.value);
+      if(Number.isNaN(v)) return;
+      if(target.dataset.modelEvShift){
+        setModelEvidenceShift(target.dataset.modelEvNode, target.dataset.modelEvIndex, target.dataset.modelEvShift, v);
+      } else if(target.dataset.modelEvWeight){
+        setModelEvidenceWeight(target.dataset.modelEvNode, target.dataset.modelEvIndex, v);
+      } else if(target.dataset.modelEvConf){
+        setModelEvidenceConf(target.dataset.modelEvNode, target.dataset.modelEvIndex, v);
+      } else if(target.dataset.modelChildShiftParent){
+        setModelChildProjectionShift(
+          target.dataset.modelChildShiftNode,
+          target.dataset.modelChildShiftIndex,
+          target.dataset.modelChildShiftChild,
+          target.dataset.modelChildShiftParent,
+          v
+        );
+      } else if(target.dataset.modelAdmMultSource){
+        setModelAdmissibilityMultiplier(
+          target.dataset.modelAdmMultNode,
+          target.dataset.modelAdmMultState,
+          target.dataset.modelAdmMultSource,
+          v
+        );
+      }
+      refreshAfterModelOverlayEdit(false);
+    });
+    inp.addEventListener('change', ()=>refreshAfterModelOverlayEdit(true));
+  });
+  document.querySelectorAll('#tree [data-model-focus]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.modelFocus;
+      if(!key) return;
+      modelFocusKey = key;
+      renderModelTree();
+      updateModelView();
+      document.getElementById("tree").scrollIntoView({behavior:"smooth", block:"start"});
+    });
+  });
+}
+function updateModelView(){
+  renderModelLayer3();
+  document.querySelectorAll('#tree .model-chip').forEach(ch=>{
+    ch.classList.toggle("off", !state[ch.dataset.evid]);
+  });
+  document.querySelectorAll('#tree .evchip[data-evid]').forEach(ch=>{
+    ch.classList.toggle("off", !state[ch.dataset.evid]);
+  });
+  const root = modelResultByKey(modelFocusKey);
+  const entries = modelEntries(root.node, root.output);
+  const modal = entries.filter(x=>typeof x.p==="number").sort((a,b)=>b.p-a.p)[0];
+  const admitted = current.sources.filter(s=>state[s.id]).length;
+  const verdict = document.getElementById("verdict");
+  const verdictLabel = modelFocusKey==="root" ? modelRootLabel() : modelLabel(modelFocusKey);
+  verdict.textContent = modal
+    ? `${verdictLabel}: ${modal.label} (${(modal.p*100).toFixed(0)}%)`
+    : `${verdictLabel} model`;
+  verdict.style.color = modal && modal.color ? modal.color : "#475569";
+  document.getElementById("netinfo").textContent =
+    `${admitted}/${current.sources.length} sources admitted · typed output: ${modelOutputLabel(root.output.kind)} · no single P axis`;
+}
+
+function update(){
+  renderBibliography();
+  current.sources.forEach(s=>{
+    const el=document.getElementById("card-"+s.id);
+    if(el) el.classList.toggle("off", !state[s.id]);
+  });
+  renderModelTree();
+  updateModelView();
+}
+
+function overlayStatus(msg){
+  const el = document.getElementById("overlayStatus");
+  if(!el) return;
+  el.textContent = msg || "";
+  if(msg) window.setTimeout(()=>{ if(el.textContent === msg) el.textContent = ""; }, 2200);
+}
+function currentOverlaySnapshot(){
+  return {
+    version:1,
+    claim:currentKey,
+    sourceAdmission:{...state},
+    model:clonePlain(modelComputeState)
+  };
+}
+function mergeModelComputeOverlay(imported){
+  if(!imported || typeof imported !== "object") return;
+  const base = clonePlain(modelComputeState);
+  Object.keys(imported).forEach(nodeKey=>{
+    if(!base[nodeKey] || !imported[nodeKey] || typeof imported[nodeKey] !== "object") return;
+    ["prior","n","multipliers"].forEach(section=>{
+      if(imported[nodeKey][section] && typeof imported[nodeKey][section] === "object"){
+        base[nodeKey][section] = {...(base[nodeKey][section] || {}), ...clonePlain(imported[nodeKey][section])};
+      }
+    });
+    if(typeof imported[nodeKey].corr === "number") base[nodeKey].corr = Math.max(0, Math.min(1, imported[nodeKey].corr));
+    if(imported[nodeKey].evidence && typeof imported[nodeKey].evidence === "object"){
+      base[nodeKey].evidence = base[nodeKey].evidence || {};
+      Object.keys(imported[nodeKey].evidence).forEach(idx=>{
+        if(!base[nodeKey].evidence[idx]) return;
+        base[nodeKey].evidence[idx] = {...base[nodeKey].evidence[idx], ...clonePlain(imported[nodeKey].evidence[idx])};
+      });
+    }
+  });
+  Object.keys(modelComputeState).forEach(k=>delete modelComputeState[k]);
+  Object.assign(modelComputeState, base);
+}
+function applyOverlaySnapshot(snapshot){
+  if(!snapshot || typeof snapshot !== "object") throw new Error("Overlay JSON must be an object");
+  if(snapshot.claim && snapshot.claim !== currentKey) throw new Error(`Overlay is for ${snapshot.claim}, not ${currentKey}`);
+  Object.keys(state).forEach(k=>delete state[k]);
+  Object.assign(state, snapshot.sourceAdmission || {});
+  resetModelComputeState();
+  mergeModelComputeOverlay(snapshot.model);
+  renderCards();
+  if(renderModeIsTyped(claimRenderMode(current))) renderModelTree();
+  update();
+}
+async function copyOverlay(){
+  const text = JSON.stringify(currentOverlaySnapshot(), null, 2);
+  try{
+    await navigator.clipboard.writeText(text);
+    overlayStatus("overlay copied");
+  } catch(err){
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    overlayStatus("overlay copied");
+  }
+}
+async function pasteOverlay(){
+  try{
+    const text = navigator.clipboard && navigator.clipboard.readText
+      ? await navigator.clipboard.readText()
+      : window.prompt("Paste overlay JSON");
+    if(!text) return;
+    applyOverlaySnapshot(JSON.parse(text));
+    overlayStatus("overlay applied");
+  } catch(err){
+    overlayStatus("overlay rejected");
+    console.warn("Overlay import failed", err);
+  }
+}
+
+/* controls */
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  current.sources.forEach(s=>state[s.id]=true);
+  resetModelComputeState();
+  renderCards(); renderModelTree(); update();
+});
+document.getElementById("anchoredBtn").addEventListener("click", ()=>{
+  current.sources.forEach(s=>{ if(s.weak) state[s.id]=false; });
+  renderCards(); update();
+});
+document.getElementById("citeStyle").addEventListener("change", renderBibliography);
+document.getElementById("citeAdmittedOnly").addEventListener("change", renderBibliography);
+document.getElementById("copyBibBtn").addEventListener("click", copyBibliography);
+document.getElementById("downloadBibBtn").addEventListener("click", downloadBibliography);
+document.getElementById("copyOverlayBtn").addEventListener("click", copyOverlay);
+document.getElementById("pasteOverlayBtn").addEventListener("click", pasteOverlay);
+
+/* claim picker */
+const sel = document.getElementById("claimsel");
+Object.keys(CLAIMS).forEach(k=>{
+  const o=document.createElement("option"); o.value=k; o.textContent=CLAIMS[k].label; sel.appendChild(o);
+});
+sel.addEventListener("change", e=>loadClaim(e.target.value));
+
+reportClaimSchemaIssues();
+loadClaim("covid");
+</script>
+</body>
+</html>

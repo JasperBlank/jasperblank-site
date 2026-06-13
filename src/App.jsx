@@ -10,6 +10,13 @@ export default function PersonalWebsite() {
   // Add your work as it grows
   const projects = [
     {
+      title: "Epistack — Claim Source Map",
+      description:
+        "A three-layer tool for contested claims: verbatim source quotes, a typed tree of Update Nodes, and a per-reader probability on top. Every percentage decomposes into an editable prior plus source-grounded shifts — no number without a quote and a reason.",
+      link: "/epistack/",
+      tags: ["JavaScript", "Epistemics", "Bayesian", "Interactive"],
+    },
+    {
       title: "Mind Chess",
       description:
         "A two-player bluff game: keep saying \"Check\" until someone commits to \"Checkmate.\" You win by calling it just before your opponent does. Keyboard-only input keeps commits hidden from the person sitting next to you.",
