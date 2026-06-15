@@ -1,12 +1,49 @@
-# React + Vite
+# Jasper Blank Site
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Personal portfolio site for Jasper Blank, built with React and Vite. The repository also hosts small static projects under `public/`, including the Epistack claim-source-map prototype submitted for the LessWrong epistemic case-study challenge.
 
-Currently, two official plugins are available:
+Challenge context: [Lab leaks, black holes, and eggs: epistemic case study](https://www.lesswrong.com/posts/frizRHnA6AZpJSDqw/lab-leaks-black-holes-and-eggs-epistemic-case-study)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## What Judges Should Look At
 
-## Expanding the ESLint configuration
+The main challenge-relevant project is:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Epistack / Claim Source Map**
+  - Live route when the site is deployed from its root: `/epistack/`
+  - Source map app shell and renderer: [`public/epistack/index.html`](public/epistack/index.html)
+  - Claim data: [`public/epistack/claims.js`](public/epistack/claims.js)
+
+The claim-source-map is a static, browser-only epistemic tool for contested claims. It is designed around three layers:
+
+1. **Layer 1: Sources** - primary-source links, quote snippets, provenance tiers, and drift notes.
+2. **Layer 2: Structure** - typed Update Nodes that show priors, prior strength, source shifts, source weights, admissibility multipliers, dependence adjustments, and child-claim projections.
+3. **Layer 3: Reader Overlay / Conclusion** - the computed distribution after source admission and editable assumptions cascade through the tree.
+
+The important point is that the percentages are not just labels. They are decomposed into editable priors plus source-grounded update terms, so a reviewer can inspect where a number came from and change the assumptions.
+
+## Repository Structure
+
+- [`src/App.jsx`](src/App.jsx) - React portfolio landing page and project cards.
+- [`src/main.jsx`](src/main.jsx) - React/Vite entry point.
+- [`public/epistack/`](public/epistack/) - Epistack claim-source-map prototype.
+- `public/mind-chess/` - static Mind Chess game.
+- `public/1d-chess/` - static 1D Chess project.
+- `public/hex-tictactoe.html` - static Hex Tic Tac Toe project.
+- `public/scorekeeper/` - static boardgame scorekeeper.
+
+## Running Locally
+
+```bash
+npm install
+npm run dev
+```
+
+Then open the Vite local URL and navigate to `/epistack/` for the claim-source-map prototype.
+
+## Build
+
+```bash
+npm run build
+```
+
+The Vite build copies the static projects in `public/` into the deployed output, so `public/epistack/index.html` becomes the deployed `/epistack/` route.
