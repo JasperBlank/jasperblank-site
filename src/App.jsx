@@ -91,7 +91,7 @@ export default function PersonalWebsite() {
         >
           <h1 className="text-4xl sm:text-6xl font-bold mb-4">Jasper Blank</h1>
           <p className="text-xl sm:text-2xl text-gray-600 dark:text-gray-300">
-            Biorobotics Master passionate about merging biology & robotics to build adaptive machines.
+            AI engineer with a robotics background. I build with AI agents and research how AI models work on the inside.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <Button variant="default" size="lg" asChild>
