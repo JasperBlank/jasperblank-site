@@ -30,6 +30,10 @@ export default function PersonalWebsite() {
       linkLabel: "Play on itch.io",
       tags: ["Godot", "Game", "Incremental", "Physics"],
     },
+  ]; // { title, description, link, linkLabel?, tags }
+
+  // Shown as one small line of links under the project cards; the description becomes the hover text.
+  const smallProjects = [
     {
       title: "Mind Chess",
       description:
@@ -58,7 +62,7 @@ export default function PersonalWebsite() {
       link: "/scorekeeper/",
       tags: ["React", "TypeScript", "Local-first"],
     },
-  ]; // { title, description, link, linkLabel?, tags }
+  ]; // { title, description, link, tags }
   const research = [
     {
       title: "Is GPT 2XL already clean?",
@@ -151,6 +155,24 @@ export default function PersonalWebsite() {
                 </Card>
               ))}
             </div>
+          )}
+          {smallProjects.length > 0 && (
+            <p className="mt-6 text-sm text-gray-500">
+              Small games &amp; tools:{" "}
+              {smallProjects.map((p, i) => (
+                <span key={p.title}>
+                  {i > 0 && <span aria-hidden="true"> · </span>}
+                  <a
+                    href={p.link}
+                    title={p.description}
+                    className="whitespace-nowrap underline underline-offset-2 hover:text-gray-800"
+                    {...linkProps(p.link)}
+                  >
+                    {p.title}
+                  </a>
+                </span>
+              ))}
+            </p>
           )}
         </section>
 
