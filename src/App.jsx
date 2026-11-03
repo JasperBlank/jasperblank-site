@@ -6,6 +6,10 @@ import { motion } from "framer-motion";
 const user = "jasper.j.blank";
 const domain = "gmail.com";
 
+// External links (itch.io, LessWrong) open in a new tab; on-site projects stay in place.
+const linkProps = (href) =>
+  /^https?:\/\//.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {};
+
 export default function PersonalWebsite() {
   // Add your work as it grows
   const projects = [
@@ -15,6 +19,14 @@ export default function PersonalWebsite() {
         "A three-layer tool for contested claims: verbatim source quotes, a typed tree of Update Nodes, and a per-reader probability on top. Every percentage decomposes into an editable prior plus source-grounded shifts — no number without a quote and a reason.",
       link: "/epistack/",
       tags: ["JavaScript", "Epistemics", "Bayesian", "Interactive"],
+    },
+    {
+      title: "You are a tornado",
+      description:
+        "Experience what it is like to be a tornado and bring ruin upon the land. A Katamari Damacy-inspired incremental game made in Godot, playable in the browser or as a Windows download.",
+      link: "https://jasperblank.itch.io/you-are-a-tornado",
+      linkLabel: "Play on itch.io",
+      tags: ["Godot", "Game", "Incremental", "Physics"],
     },
     {
       title: "Mind Chess",
@@ -44,8 +56,17 @@ export default function PersonalWebsite() {
       link: "/scorekeeper/",
       tags: ["React", "TypeScript", "Local-first"],
     },
-  ]; // { title, description, link, tags }
-  const research = []; // { title, abstract, link }
+  ]; // { title, description, link, linkLabel?, tags }
+  const research = [
+    {
+      title: "Is GPT 2XL already clean?",
+      venue: "LessWrong · October 2026",
+      abstract:
+        "Opus 5.5 is able to identify 3-19% of the neurons of GPT 2-XL based on activations. This is a big improvement over the 0.3% that GPT-4 was able to achieve in 2023.",
+      link: "https://www.lesswrong.com/posts/drMv4SM2gaxk3oz3m/is-gpt-2xl-already-clean",
+      linkLabel: "Read on LessWrong",
+    },
+  ]; // { title, venue?, abstract, link, linkLabel? }
 
   return (
     <><header className="flex items-center mb-12 space-x-4">
@@ -113,8 +134,8 @@ export default function PersonalWebsite() {
                     )}
                     {p.link && (
                       <Button asChild size="sm" className="self-start">
-                        <a href={p.link} className="flex items-center gap-1.5">
-                          View project <ArrowUpRight size={14} />
+                        <a href={p.link} className="flex items-center gap-1.5" {...linkProps(p.link)}>
+                          {p.linkLabel ?? "View project"} <ArrowUpRight size={14} />
                         </a>
                       </Button>
                     )}
@@ -136,12 +157,19 @@ export default function PersonalWebsite() {
                 <Card key={r.title} className="hover:shadow-lg transition-shadow">
                   <CardContent className="p-6 flex flex-col gap-2">
                     <h3 className="text-lg font-medium">{r.title}</h3>
+                    {r.venue && (
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {r.venue}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {r.abstract}
                     </p>
                     {r.link && (
-                      <Button asChild size="sm">
-                        <a href={r.link}>Read</a>
+                      <Button asChild size="sm" className="self-start mt-2">
+                        <a href={r.link} className="flex items-center gap-1.5" {...linkProps(r.link)}>
+                          {r.linkLabel ?? "Read"} <ArrowUpRight size={14} />
+                        </a>
                       </Button>
                     )}
                   </CardContent>
