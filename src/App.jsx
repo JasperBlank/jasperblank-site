@@ -1,6 +1,6 @@
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
-import { Mail, FileText, ArrowUpRight } from "lucide-react";
+import { Mail, FileText, ArrowUpRight, Linkedin } from "lucide-react";
 import { motion } from "framer-motion";
 
 const user = "jasper.j.blank";
@@ -9,6 +9,8 @@ const domain = "gmail.com";
 // External links (itch.io, LessWrong) open in a new tab; on-site projects stay in place.
 const linkProps = (href) =>
   /^https?:\/\//.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {};
+
+const linkedinUrl = "https://www.linkedin.com/in/jasper-blank";
 
 export default function PersonalWebsite() {
   // Add your work as it grows
@@ -87,7 +89,7 @@ export default function PersonalWebsite() {
           <p className="text-xl sm:text-2xl text-gray-600 dark:text-gray-300">
             Biorobotics Master passionate about merging biology & robotics to build adaptive machines.
           </p>
-          <div className="mt-6 flex justify-center gap-4">
+          <div className="mt-6 flex flex-wrap justify-center gap-4">
             <Button variant="default" size="lg" asChild>
               <a
                 className="flex items-center gap-2"
@@ -104,6 +106,12 @@ export default function PersonalWebsite() {
               <a href="/JasperBlank_CV.pdf" className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
                 CV
+              </a>
+            </Button>
+            <Button variant="outline" asChild size="lg">
+              <a href={linkedinUrl} className="flex items-center gap-2" {...linkProps(linkedinUrl)}>
+                <Linkedin className="w-5 h-5" />
+                LinkedIn
               </a>
             </Button>
           </div>
