@@ -140,6 +140,79 @@ export default function PersonalWebsite() {
           </div>
         </motion.section>
 
+        {/* Research */}
+        <section className="w-full max-w-4xl">
+          <h2 className="text-2xl font-semibold mb-4">Research</h2>
+          {research.length === 0 ? (
+            <p className="text-gray-500">No publications yet.</p>
+          ) : (
+            <div className="space-y-6">
+              {research.map((r) => (
+                <Card key={r.title} className="hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6 flex flex-col gap-2">
+                    <h3 className="text-lg font-medium">{r.title}</h3>
+                    {r.venue && (
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {r.venue}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {r.abstract}
+                    </p>
+                    {r.link && (
+                      <Button asChild size="sm" className="self-start mt-2">
+                        <a href={r.link} className="flex items-center gap-1.5" {...linkProps(r.link)}>
+                          {r.linkLabel ?? "Read"} <ArrowUpRight size={14} />
+                        </a>
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Experience */}
+        {experience.length > 0 && (
+          <section className="w-full max-w-4xl">
+            <h2 className="text-2xl font-semibold mb-4">Experience</h2>
+            <div className="space-y-6">
+              {experience.map((e) => (
+                <Card key={e.title} className="hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6 flex flex-col gap-2">
+                    <h3 className="text-lg font-medium">{e.title}</h3>
+                    {e.meta && (
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {e.meta}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {e.description}
+                    </p>
+                    {e.tags && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {e.tags.map((tag) => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {e.link && (
+                      <Button asChild size="sm" className="self-start mt-2">
+                        <a href={e.link} className="flex items-center gap-1.5" {...linkProps(e.link)}>
+                          {e.linkLabel ?? "Read more"} <ArrowUpRight size={14} />
+                        </a>
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Projects */}
         <section className="w-full max-w-4xl">
           <h2 className="text-2xl font-semibold mb-4">Projects</h2>
@@ -192,79 +265,6 @@ export default function PersonalWebsite() {
                 </span>
               ))}
             </p>
-          )}
-        </section>
-
-        {/* Experience */}
-        {experience.length > 0 && (
-          <section className="w-full max-w-4xl">
-            <h2 className="text-2xl font-semibold mb-4">Experience</h2>
-            <div className="space-y-6">
-              {experience.map((e) => (
-                <Card key={e.title} className="hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6 flex flex-col gap-2">
-                    <h3 className="text-lg font-medium">{e.title}</h3>
-                    {e.meta && (
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {e.meta}
-                      </p>
-                    )}
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {e.description}
-                    </p>
-                    {e.tags && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {e.tags.map((tag) => (
-                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {e.link && (
-                      <Button asChild size="sm" className="self-start mt-2">
-                        <a href={e.link} className="flex items-center gap-1.5" {...linkProps(e.link)}>
-                          {e.linkLabel ?? "Read more"} <ArrowUpRight size={14} />
-                        </a>
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Research */}
-        <section className="w-full max-w-4xl">
-          <h2 className="text-2xl font-semibold mb-4">Research</h2>
-          {research.length === 0 ? (
-            <p className="text-gray-500">No publications yet.</p>
-          ) : (
-            <div className="space-y-6">
-              {research.map((r) => (
-                <Card key={r.title} className="hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6 flex flex-col gap-2">
-                    <h3 className="text-lg font-medium">{r.title}</h3>
-                    {r.venue && (
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {r.venue}
-                      </p>
-                    )}
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {r.abstract}
-                    </p>
-                    {r.link && (
-                      <Button asChild size="sm" className="self-start mt-2">
-                        <a href={r.link} className="flex items-center gap-1.5" {...linkProps(r.link)}>
-                          {r.linkLabel ?? "Read"} <ArrowUpRight size={14} />
-                        </a>
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
           )}
         </section>
       </main></>
