@@ -1,0 +1,108 @@
+/* Shared styles for the long-form project write-ups (/warming-control/, /vessel-targeting/).
+   Light only, like the homepage (its Tailwind dark mode is switched off). */
+:root {
+  color-scheme: light;
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --text: #1f2937;
+  --text-2: #4b5563;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --chip: #f3f4f6;
+  --accent: #c2410c;
+  --accent-soft: #fff7ed;
+  --accent-line: #fed7aa;
+  --radius: 12px;
+  --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+a:hover { text-decoration: none; }
+
+.site-header {
+  max-width: 56rem; margin: 0 auto; padding: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.site-header img { width: 32px; height: 32px; }
+.site-header a { font-weight: 800; font-size: 18px; text-decoration: none; }
+
+main { max-width: 44rem; margin: 0 auto; padding: 24px 16px 64px; }
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent);
+}
+h1 {
+  margin: 0 0 16px;
+  font-size: clamp(28px, 6vw, 40px); line-height: 1.15; letter-spacing: -0.02em; font-weight: 800;
+  text-wrap: balance;
+}
+.lede { margin: 0 0 28px; font-size: 18px; color: var(--text-2); }
+h2 { margin: 48px 0 12px; font-size: 22px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; }
+h3 { margin: 28px 0 6px; font-size: 17px; line-height: 1.4; }
+p { margin: 0 0 14px; }
+strong { font-weight: 650; }
+
+.stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+  margin: 0 0 32px; padding: 0; list-style: none;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow);
+}
+.stat .num {
+  display: block; font-size: 26px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.stat .label { display: block; margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: var(--text-2); }
+@media (max-width: 600px) { .stats { grid-template-columns: 1fr; } }
+
+figure { margin: 24px 0 28px; }
+figure img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+figure.narrow img { max-width: 320px; margin: 0 auto; }
+figcaption { margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+.diagram {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px 12px 8px; box-shadow: var(--shadow);
+}
+.diagram svg { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; }
+.diagram text { font-family: ui-sans-serif, system-ui, sans-serif; }
+
+.table-wrap { overflow-x: auto; margin: 20px 0 24px; }
+table.data {
+  width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 14.5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+table.data th, table.data td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+table.data thead th { font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--chip); }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.data tbody tr:last-child td { border-bottom: 0; }
+.table-note { margin: -14px 0 24px; font-size: 13.5px; color: var(--muted); }
+
+.learned { margin: 0; padding: 0; list-style: none; }
+.learned li { margin: 0 0 16px; padding-left: 16px; border-left: 3px solid var(--border); }
+.learned strong { display: block; }
+
+.note {
+  margin: 28px 0; padding: 12px 14px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 8px;
+  font-size: 14.5px; color: var(--text-2);
+}
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tags li { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--text-2); }
+
+.back { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 15px; }

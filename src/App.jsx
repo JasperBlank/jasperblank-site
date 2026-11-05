@@ -63,7 +63,26 @@ export default function PersonalWebsite() {
       tags: ["React", "TypeScript", "Local-first"],
     },
   ]; // { title, description, link, tags }
+  const experience = [
+    {
+      title: "Closed-loop temperature control for a surgical warming blanket",
+      meta: "R&D internship · TSC Life Sciences · Feb–May 2026 · graded 8/10",
+      description:
+        "Turned the Mistral-Air MA1200 surgical warming system from a fixed-temperature heater into a two-loop controller that follows the patient's skin temperature, running on the real device. Along the way: a 23-state patient thermal model, a Godot simulator, my own MPC benchmarked against the PID, and an isolated sensor front-end designed to IEC 60601-1.",
+      link: "/warming-control/",
+      linkLabel: "Read the write-up",
+      tags: ["Control systems", "Embedded", "Python", "Godot", "Medical devices"],
+    },
+  ]; // { title, meta?, description, link, linkLabel?, tags }
   const research = [
+    {
+      title: "Stereo-endoscopic vessel targeting",
+      venue: "Master's thesis · Surgical Robotics Lab, University of Twente · in progress",
+      abstract:
+        "An 8 mm probe with two micro-endoscopes that finds a blood vessel and steers a needle to it, built from scratch: SLA-printed probe, PDMS vessel phantoms, stereo vision and motor control. The thesis asks whether the second camera is worth the 2 mm of probe diameter it costs. In a digital twin, two cameras reached the target in every closed-loop run and one camera in none; matched physical trials are next.",
+      link: "/vessel-targeting/",
+      linkLabel: "Read the write-up",
+    },
     {
       title: "Is GPT 2XL already clean?",
       venue: "LessWrong · October 2026",
@@ -175,6 +194,46 @@ export default function PersonalWebsite() {
             </p>
           )}
         </section>
+
+        {/* Experience */}
+        {experience.length > 0 && (
+          <section className="w-full max-w-4xl">
+            <h2 className="text-2xl font-semibold mb-4">Experience</h2>
+            <div className="space-y-6">
+              {experience.map((e) => (
+                <Card key={e.title} className="hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6 flex flex-col gap-2">
+                    <h3 className="text-lg font-medium">{e.title}</h3>
+                    {e.meta && (
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {e.meta}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {e.description}
+                    </p>
+                    {e.tags && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {e.tags.map((tag) => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {e.link && (
+                      <Button asChild size="sm" className="self-start mt-2">
+                        <a href={e.link} className="flex items-center gap-1.5" {...linkProps(e.link)}>
+                          {e.linkLabel ?? "Read more"} <ArrowUpRight size={14} />
+                        </a>
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Research */}
         <section className="w-full max-w-4xl">

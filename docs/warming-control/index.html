@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closed-loop warming control – Jasper Blank</title>
+<meta name="description" content="R&amp;D internship at TSC Life Sciences: a closed-loop temperature controller for the Mistral-Air MA1200 surgical warming system, from patient model to running on the device.">
+<link rel="icon" href="/JB_logo.png">
+
+<!-- Link previews. The image is og-image.png in this folder, 1200×630. -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://jasperblank.com/warming-control/">
+<meta property="og:title" content="Closed-loop temperature control for a surgical warming blanket">
+<meta property="og:description" content="R&amp;D internship at TSC Life Sciences: a two-loop controller for the Mistral-Air MA1200, from a 23-state patient model to running on the device.">
+<meta property="og:image" content="https://jasperblank.com/warming-control/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Patient simulator showing skin and core temperatures per body segment">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/writeup.css">
+</head>
+<body>
+
+<header class="site-header">
+  <img src="/JB_logo.png" alt="">
+  <a href="/">Jasper Blank</a>
+</header>
+
+<main>
+  <p class="eyebrow">R&amp;D internship · TSC Life Sciences · Feb–May 2026 · graded 8/10</p>
+  <h1>Closed-loop temperature control for a surgical warming blanket</h1>
+  <p class="lede">
+    For my MSc Biorobotics internship (University of Twente) I gave the Mistral-Air MA1200 a sense of the patient.
+    The MA1200 keeps patients warm during surgery by blowing warm air through an inflatable blanket, but it blows
+    at a fixed temperature, however warm the patient already is. I built a controller that responds to the
+    patient's skin temperature and got it running on the device itself.
+  </p>
+
+  <ul class="stats" aria-label="Key results">
+    <li class="stat">
+      <span class="num">σ 0.03 °C</span>
+      <span class="label">outlet-air stability during a 3-hour closed-loop run on the device</span>
+    </li>
+    <li class="stat">
+      <span class="num">0.05 °C</span>
+      <span class="label">RMS error of my linearised 23-state patient model against the full non-linear one</span>
+    </li>
+    <li class="stat">
+      <span class="num">8/10</span>
+      <span class="label">final grade for the internship</span>
+    </li>
+  </ul>
+
+  <figure>
+    <img src="godot-simulator.webp" width="1191" height="711"
+         alt="Patient simulator: a patient lying on a warming blanket with temperatures per body segment, blanket and device selection, and a live temperature plot">
+    <figcaption>The patient simulator I built in Godot: live skin and core temperatures per body segment, with anaesthesia, blanket and device settings you can change on the fly.</figcaption>
+  </figure>
+
+  <h2>The problem</h2>
+  <p>
+    Between 40% and 70% of adults under general anaesthesia become hypothermic during surgery. Anaesthesia alone drops
+    core temperature by 0.5–1.5 °C in the first half hour, as warmth redistributes from the trunk to the limbs.
+  </p>
+  <p>
+    Forced-air warming counters this, but the MA1200 runs open loop: the nurse picks an outlet temperature (38 or 43 °C)
+    and the airflow stays constant. The device never learns how warm the patient is, which wastes energy and makes
+    overheating the skin more likely. My brief was a proof-of-concept closed-loop controller, with one hard
+    constraint: keep the one-button interface.
+  </p>
+
+  <h2>What I built</h2>
+
+  <h3>A patient model</h3>
+  <p>
+    I implemented a 23-state thermal model of a patient based on the Fiala thermoregulation model: central core,
+    trunk, head, arms, legs, hands and feet, plus the supply hose, the blanket and the anaesthetic (propofol)
+    concentration. Linearised, it stays within 0.05 °C RMS of the full non-linear model. Its time constants span five
+    decades. Skin reacts within 1–5 minutes; core temperature takes about 50.
+  </p>
+
+  <h3>A patient simulator</h3>
+  <p>
+    I wrapped the model in an interactive Godot app (shown above) to try scenarios: anaesthesia on or off, different
+    blankets, extra heat from a heart-lung machine. It made the model's behaviour visible to colleagues who would
+    never read the equations.
+  </p>
+
+  <h3>A two-loop controller</h3>
+  <p>
+    Because the skin responds about 29 times faster than the core, the controller is a cascade. A fast inner loop
+    sets the fan speed from two skin thermistors. A slow outer loop estimates core temperature and shifts the skin
+    setpoint. Both run on top of the device's existing heater loop, which keeps the outlet air at a set temperature.
+  </p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 400 440" role="img" aria-labelledby="cascade-title cascade-desc">
+      <title id="cascade-title">Cascade controller</title>
+      <desc id="cascade-desc">The outer loop turns a core-temperature estimate into a skin setpoint. The inner loop turns skin temperature into fan speed. The existing heater loop holds the outlet air temperature, which warms the blanket and patient. Skin temperature feeds back to the inner loop and the core estimate to the outer loop.</desc>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#6b7280"/>
+        </marker>
+        <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#c2410c"/>
+        </marker>
+      </defs>
+
+      <!-- input -->
+      <text x="112" y="14" text-anchor="middle" font-size="12" fill="#4b5563">core target, 37 °C</text>
+      <line x1="112" y1="20" x2="112" y2="38" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- outer loop (new) -->
+      <rect x="12" y="40" width="200" height="60" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="24" y="64" font-size="13" font-weight="700" fill="#1f2937">Outer loop · slow</text>
+      <text x="24" y="84" font-size="12" fill="#4b5563">τ ≈ 50 min · sets skin setpoint</text>
+
+      <line x1="112" y1="100" x2="112" y2="138" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="120" y="124" font-size="12" fill="#4b5563">skin setpoint</text>
+
+      <!-- inner loop (new) -->
+      <rect x="12" y="140" width="200" height="60" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="24" y="164" font-size="13" font-weight="700" fill="#1f2937">Inner loop · fast</text>
+      <text x="24" y="184" font-size="12" fill="#4b5563">τ ≈ 1–5 min · PID → fan speed</text>
+
+      <line x1="112" y1="200" x2="112" y2="238" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="120" y="224" font-size="12" fill="#4b5563">fan speed</text>
+
+      <!-- existing heater loop -->
+      <rect x="12" y="240" width="200" height="60" rx="8" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5"/>
+      <text x="24" y="264" font-size="13" font-weight="700" fill="#1f2937">Heater loop (existing)</text>
+      <text x="24" y="284" font-size="12" fill="#4b5563">holds outlet air temperature</text>
+
+      <line x1="112" y1="300" x2="112" y2="338" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="120" y="324" font-size="12" fill="#4b5563">warm air</text>
+
+      <!-- plant -->
+      <rect x="12" y="340" width="200" height="60" rx="8" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5"/>
+      <text x="24" y="364" font-size="13" font-weight="700" fill="#1f2937">Blanket + patient</text>
+      <text x="24" y="384" font-size="12" fill="#4b5563">warm air → skin → core</text>
+
+      <!-- inner feedback: skin temperature -->
+      <polyline points="212,362 300,362 300,172 214,172" fill="none" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrow-accent)"/>
+      <text x="256" y="165" text-anchor="middle" font-size="12" fill="#c2410c">skin temp</text>
+
+      <!-- outer feedback: core estimate -->
+      <polyline points="212,384 380,384 380,72 214,72" fill="none" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-accent)"/>
+      <text x="296" y="65" text-anchor="middle" font-size="12" fill="#c2410c">core estimate</text>
+
+      <!-- legend -->
+      <rect x="12" y="420" width="12" height="12" rx="3" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="30" y="430" font-size="12" fill="#4b5563">added in this project</text>
+      <rect x="170" y="420" width="12" height="12" rx="3" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5"/>
+      <text x="188" y="430" font-size="12" fill="#4b5563">existing device</text>
+    </svg>
+    <figcaption>The cascade. The dashed core estimate is inferred from the skin sensors, and that inference is the slow part (see below).</figcaption>
+  </figure>
+
+  <h3>Hardware and firmware</h3>
+  <p>
+    I fitted two NTC thermistors to an MA1200, extended its firmware to read them and run the controller, and flashed
+    it onto the device. Anything that touches a patient needs galvanic isolation, so I also designed an isolated
+    dual-thermistor front-end for IEC 60601-1 Type BF (2× MOPP, 4000 V AC isolation).
+  </p>
+
+  <h2>Results</h2>
+
+  <h3>In simulation: my MPC against the PID</h3>
+  <p>
+    I built a model predictive controller on the linearised patient model and benchmarked it against the cascade PID
+    through a full simulated surgery: pre-warming, anaesthesia and recovery. The PID kept core temperature within
+    0.3 °C of target, with roughly half the tracking error of bang-bang control. The MPC did no better unless it was
+    told when anaesthesia started, so I chose cascade PID: it is simpler, and it fits the existing platform.
+  </p>
+  <figure>
+    <img src="surgery-simulation.webp" width="1125" height="488" loading="lazy"
+         alt="Simulated core temperature over about 210 minutes: PID and MPC stay close to 37 °C while bang-bang control overshoots to 37.7 °C">
+    <figcaption>Simulated core temperature through a full surgery, in minutes. Orange: cascade PID. Blue: MPC. Red: bang-bang.</figcaption>
+  </figure>
+
+  <h3>On the bench</h3>
+  <p>
+    The test patient was a 2-litre water bag on an underblanket, the thermal load that IEC 60601-2-35 (Annex CC)
+    specifies for testing heating blankets, with four extra loggers for independent validation. In a 182-minute
+    closed-loop run, both skin sensors settled at the 37 °C setpoint without overshoot, and the outlet air held at
+    45.00 °C with a standard deviation of 0.03 °C. As the dummy neared the setpoint, the controller throttled the
+    heater back; the warm-up itself still needs close to full power.
+  </p>
+  <figure>
+    <img src="bench-setup.webp" width="1200" height="901" loading="lazy"
+         alt="Lab bench with a Mistral-Air warming unit connected by a hose to a silver underblanket, with a water bag and sensor wires on top">
+    <figcaption>The bench setup: MA1200, underblanket, 2 L water bag, thermistors and data loggers.</figcaption>
+  </figure>
+
+  <h2>What I left out, on purpose</h2>
+  <p>
+    I didn't implement direct core-temperature measurement: the invasive options carry a regulatory burden out of
+    proportion to a proof of concept. I also didn't build adaptive control. The dominant disturbance is the sudden
+    shock of anaesthesia, and an estimator that first has to learn new parameters adds little on that timescale.
+  </p>
+
+  <h2>What I learned</h2>
+  <ul class="learned">
+    <li>
+      <strong>You can't read the core from the skin quickly.</strong>
+      A Kalman–Bucy filter analysis showed that with skin sensors alone, the core-temperature estimate takes about
+      150 minutes to become reliable. Steering on core temperature properly needs a direct core measurement.
+    </li>
+    <li>
+      <strong>A well-tuned PID is hard to beat without information.</strong>
+      MPC is only as good as what it knows about the patient. Without a signal for when anaesthesia starts, its
+      patient model is effectively a pile of tuning parameters, and it did no better than the PID.
+    </li>
+    <li>
+      <strong>Fix the measurement protocol before measuring.</strong>
+      I didn't lock down the water-bag protocol before starting, so those measurements are less sharp than they
+      should be, and the extra measurement days to tighten them never happened. It's the first thing I'd change.
+    </li>
+  </ul>
+
+  <p class="note">
+    All measurements were made on a water-bag test setup, not on patients, with the protocol limitation described
+    above. This is a proof of concept, not a certified medical device.
+  </p>
+
+  <ul class="tags" aria-label="Tools">
+    <li>Control systems</li>
+    <li>Python</li>
+    <li>MATLAB/Simulink</li>
+    <li>Godot</li>
+    <li>Embedded C</li>
+    <li>KiCad</li>
+    <li>IEC 60601</li>
+  </ul>
+
+  <p class="back"><a href="/">← Back to jasperblank.com</a></p>
+</main>
+
+</body>
+</html>

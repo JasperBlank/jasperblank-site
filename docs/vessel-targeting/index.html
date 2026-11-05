@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stereo-endoscopic vessel targeting – Jasper Blank</title>
+<meta name="description" content="Master's thesis at the Surgical Robotics Lab, University of Twente: an 8 mm probe with two micro-endoscopes that finds a blood vessel and steers a needle to it, and whether the second camera earns its place.">
+<link rel="icon" href="/JB_logo.png">
+
+<!-- Link previews. The image is og-image.jpg in this folder, 1200×630. -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://jasperblank.com/vessel-targeting/">
+<meta property="og:title" content="Stereo-endoscopic vessel targeting">
+<meta property="og:description" content="Master's thesis: an 8 mm probe with two micro-endoscopes that finds a blood vessel and steers a needle to it, and whether the second camera earns its place.">
+<meta property="og:image" content="https://jasperblank.com/vessel-targeting/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Left and right endoscope views of a red vessel phantom, with a clicked target transferred from one camera to the other">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/writeup.css">
+</head>
+<body>
+
+<header class="site-header">
+  <img src="/JB_logo.png" alt="">
+  <a href="/">Jasper Blank</a>
+</header>
+
+<main>
+  <p class="eyebrow">Master's thesis · Surgical Robotics Lab, University of Twente · May 2026 – present</p>
+  <h1>Stereo-endoscopic vessel targeting</h1>
+  <p class="lede">
+    For my MSc in Biorobotics I'm building a millimetre-scale probe that finds a blood vessel through two tiny
+    cameras and steers a needle to it. The long-term goal is an instrument that enters through a small opening and
+    delivers microrobots inside a vessel. My thesis settles one design question on the way: is a second camera worth
+    the probe diameter it costs?
+  </p>
+
+  <ul class="stats" aria-label="Key numbers">
+    <li class="stat">
+      <span class="num">Ø8 mm</span>
+      <span class="label">probe carrying two micro-endoscopes, a working channel and a needle</span>
+    </li>
+    <li class="stat">
+      <span class="num">±0.345 mm</span>
+      <span class="label">task tolerance: a 30G needle tip inside a 1 mm vessel</span>
+    </li>
+    <li class="stat">
+      <span class="num">20/20 vs 0/20</span>
+      <span class="label">simulated closed-loop runs ending within 1 mm of the target, two cameras vs one</span>
+    </li>
+  </ul>
+
+  <figure>
+    <img src="stereo-click.webp" width="1440" height="720"
+         alt="Left and right endoscope views of a red, dye-filled vessel phantom. A target clicked in the left view is marked, and its projection is marked in the right view">
+    <figcaption>On the bench, 14 August 2026: a vessel clicked in the left endoscope, projected into the right one and checked there. The phantom is cast in PDMS from real vasculature.</figcaption>
+  </figure>
+
+  <h2>The question</h2>
+  <p>
+    Every millimetre of probe diameter spent on a second endoscope is taken away from patient access. Today's
+    prototype fits both cameras into 8 mm around a 4 mm working channel. The final instrument needs a 5.1 mm channel
+    for a two-photon imaging probe, and then one camera still fits in 8 mm while a useful two-camera layout needs 10 mm.
+  </p>
+  <p>
+    One camera can still measure depth, by moving between frames and triangulating across time. That works until the
+    target moves during the sweep. Two cameras measure depth in a single instant. The thesis compares the two on
+    matched targeting trials and reports both the perception error and where the needle actually ends up. Success is
+    defined physically: the needle tip has to land inside the vessel, which leaves ±0.345 mm.
+  </p>
+
+  <h2>What I built</h2>
+  <p>Over four months I built the probe, the phantoms, the vision software and the motor control myself.</p>
+
+  <h3>The probe</h3>
+  <p>
+    An SLA-printed 8 mm shell holds two 2 mm micro-endoscopes 5.32 mm apart, a 4 mm working channel and a 1 mm needle
+    channel. The layout comes from an optimiser that maximises the thinnest wall rather than from a sketch, and the
+    distance between the cameras is whatever survives it. Two guides hold the needle straight, to within 0.1 mm
+    over 30 mm.
+  </p>
+  <figure class="narrow">
+    <img src="probe-cross-section.webp" width="720" height="720" loading="lazy"
+         alt="Cross-section of the round probe tip: two endoscope pockets left and right, a large working channel in the centre and a small needle channel at the top">
+    <figcaption>Probe cross-section from the CAD model. Left and right: the endoscope pockets. Centre: the working channel. Top: the needle channel. Colour shows depth behind the tip.</figcaption>
+  </figure>
+
+  <h3>The rig and the phantoms</h3>
+  <p>
+    Three motorised linear stages move the probe as one rigid body. I drive them directly over Thorlabs' low-level
+    APT protocol, with soft limits and guarded moves. An AprilTag grid on the table makes every camera pose metric.
+    The test targets are PDMS phantoms made by soft lithography: vessel networks cast from real chick-embryo (CAM)
+    vasculature and filled with dye. They are repeatable, and their geometry is known independently of the cameras.
+  </p>
+
+  <h3>The vision chain</h3>
+  <p>
+    Both endoscopes are calibrated as a stereo pair. Vessels are detected live in both views (by colour, for now). A
+    target clicked in one view is transferred into the other and checked there, and the guarded approach re-acquires
+    the target at checkpoints on the way down instead of trusting a stale map.
+  </p>
+
+  <h3>A digital twin</h3>
+  <p>
+    I simulated the whole chain (probe, stages, both endoscope views and the phantom) so the camera comparison could
+    run before the bench was ready. It replays the same waypoints as the 14 August bench run.
+  </p>
+  <figure>
+    <img src="digital-twin.webp" width="1400" height="470" loading="lazy"
+         alt="Digital twin: an external view of the probe above a vessel network on an AprilTag grid, next to the simulated left and right endoscope views">
+    <figcaption>The digital twin with two cameras: external view (left) and both simulated endoscope views.</figcaption>
+  </figure>
+
+  <h2>Results so far</h2>
+
+  <h3>In the digital twin</h3>
+  <p>
+    Over more than 1,000 paired simulated runs, two simultaneous cameras located the target with a median error of
+    about 0.06 mm in every condition. One moving camera ranged from about 1 mm on a static target to 7 mm when the
+    target moved sideways by half a millimetre.
+  </p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Target motion</th><th class="num">One moving camera</th><th class="num">Two cameras</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Static</td><td class="num">0.98 mm</td><td class="num">0.064 mm</td></tr>
+        <tr><td>Sideways, 0.5 mm</td><td class="num">7.03 mm</td><td class="num">0.064 mm</td></tr>
+        <tr><td>Depth, 0.5 mm</td><td class="num">1.64 mm</td><td class="num">0.063 mm</td></tr>
+        <tr><td>Tilt, 2°</td><td class="num">1.56 mm</td><td class="num">0.064 mm</td></tr>
+        <tr><td>Combined (0.5 mm + 2°)</td><td class="num">6.40 mm</td><td class="num">0.064 mm</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Median localisation error, 30 paired runs per condition. Two cameras were better in every single pair.</p>
+  <p>
+    In closed loop, with the same simple controller for both, two cameras brought the tool within 1 mm of the target
+    in 20 of 20 runs in every condition and settled in about 2 seconds. One camera made it in none.
+  </p>
+  <figure>
+    <img src="twin-closed-loop.webp" width="1400" height="583" loading="lazy"
+         alt="Bar charts per target-motion condition: final targeting error is 4 to 10 mm for one camera and below 0.6 mm for two cameras; success rate within 1 mm is 0% for one camera and 100% for two">
+    <figcaption>Closed-loop targeting in the digital twin, 20 paired runs per condition. Left: final error. Right: share of runs within 1 mm. Orange: one moving camera. Blue: two cameras.</figcaption>
+  </figure>
+
+  <h3>The catch: one camera is not simply worse</h3>
+  <p>
+    The one-camera runs above used a short, 0.2-second window of frames. Give a single camera a longer 5 mm sweep over
+    a static target and it beats the stereo pair (0.026 vs 0.065 mm), because stage travel buys about three times more
+    viewpoint separation than the probe can carry. The price is time: that sweep takes around 2 seconds, and anything
+    that moves in the meantime corrupts the estimate. The pair wins because it measures depth in one instant, so its
+    own timing matters too: 100 ms of skew between the two captures raised its error from 0.06 to 0.38 mm. This rank
+    reversal is what the physical trials are designed to test.
+  </p>
+
+  <h3>On the bench</h3>
+  <p>
+    On 14 August the chain closed on real hardware for the first time: live vessel detection in both endoscopes, a
+    click transferred between the cameras, and a gated, guarded approach to the vessel plane.
+  </p>
+
+  <h2>How I work: AI agents on real hardware</h2>
+  <p>
+    I develop the software together with AI coding agents (Claude Code and Codex) working from one shared handover
+    file. It holds the hard rules: agents may edit code, read logs and run static checks, but they never run project
+    scripts themselves, so nothing an agent does can move a stage or open a camera; every axis has soft limits; and
+    every experiment ships with a launcher and a README a stranger can follow. It also records the hardware quirks that cost hours to find, such as the Ethernet
+    hub that rewrites one byte in the controllers' replies, so any position above 24.655 mm reads back 5.69 mm low.
+  </p>
+
+  <h2>What's next</h2>
+  <p>
+    Matched physical trials: the same targets run with one camera and with two, on stationary and moving phantoms,
+    with the needle-tip error measured by something other than the cameras under test. I'm writing this up as a
+    conference paper alongside the thesis, which I plan to complete in early 2027.
+  </p>
+
+  <p class="note">
+    Results marked as simulated come from a controlled digital twin with a rigid planar phantom and known camera
+    poses. The physical comparison is still in progress.
+  </p>
+
+  <p>Supervised by Juan Huaroto Sevilla and Prof. Sarthak Misra.</p>
+
+  <ul class="tags" aria-label="Tools and skills">
+    <li>Python</li>
+    <li>OpenCV</li>
+    <li>Stereo vision</li>
+    <li>Motion control</li>
+    <li>CAD + SLA printing</li>
+    <li>PDMS soft lithography</li>
+    <li>Digital twin</li>
+    <li>AI coding agents</li>
+  </ul>
+
+  <p class="back"><a href="/">← Back to jasperblank.com</a></p>
+</main>
+
+</body>
+</html>

@@ -30,6 +30,9 @@ The important point is that the percentages are not just labels. They are decomp
 - `public/1d-chess/` - static 1D Chess project.
 - `public/hex-tictactoe.html` - static Hex Tic Tac Toe project.
 - `public/scorekeeper/` - static boardgame scorekeeper.
+- `public/warming-control/` - write-up of the TSC Life Sciences internship (closed-loop control for the Mistral-Air MA1200).
+- `public/vessel-targeting/` - write-up of the master's thesis (stereo-endoscopic vessel targeting).
+- `public/writeup.css` - shared styles for the write-up pages.
 
 ## Running Locally
 
