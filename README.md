@@ -33,6 +33,7 @@ The important point is that the percentages are not just labels. They are decomp
 - `public/warming-control/` - write-up of the TSC Life Sciences internship (closed-loop control for the Mistral-Air MA1200).
 - `public/vessel-targeting/` - write-up of the master's thesis (stereo-endoscopic vessel targeting).
 - `public/writeup.css` - shared styles for the write-up pages.
+- `cv/` - LaTeX source of the CV (see below).
 
 ## Running Locally
 
@@ -50,3 +51,12 @@ npm run build
 ```
 
 The Vite build copies the static projects in `public/` into the deployed output, so `public/epistack/index.html` becomes the deployed `/epistack/` route.
+
+## CV
+
+The CV is written in LaTeX in `cv/cv.tex`, on a vendored copy of the [Awesome-CV](https://github.com/posquit0/Awesome-CV) class (LPPL v1.3c, with two local changes listed at the top of `cv/awesome-cv/awesome-cv.cls`). It builds with MiKTeX's LuaLaTeX and must stay one page.
+
+```powershell
+.\cv\build.ps1            # draft: cv/JasperBlank_CV.pdf (not committed)
+.\cv\build.ps1 -Publish   # also copies it into public/ and docs/
+```

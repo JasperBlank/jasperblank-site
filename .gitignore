@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# CV build output (the published copies live in public/ and docs/)
+cv/*.aux
+cv/*.out
+cv/*.pdf
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

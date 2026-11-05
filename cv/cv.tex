@@ -1,0 +1,206 @@
+%-------------------------------------------------------------------------------
+% Jasper Blank — Curriculum Vitae
+%
+% Built on Awesome-CV (github.com/posquit0/Awesome-CV, LPPL v1.3c), vendored
+% in awesome-cv/. Build with:  .\cv\build.ps1
+%
+% Font note: upstream Awesome-CV asks for "Source Sans 3", which MiKTeX does
+% not package. The vendored class has been patched to use Lato instead — same
+% humanist-sans character, and it ships the Light weight the header style
+% needs. The class's only other local change disables \RequirePackage{bookmark};
+% both are listed at the top of awesome-cv.cls. Roboto is untouched.
+% If you ever re-pull awesome-cv.cls from upstream, redo both changes.
+%-------------------------------------------------------------------------------
+
+\documentclass[10pt, a4paper]{awesome-cv}
+
+\geometry{left=1.5cm, top=1.0cm, right=1.5cm, bottom=1.2cm, footskip=.4cm}
+\colorlet{awesome}{awesome-darknight}
+\setbool{acvSectionColorHighlight}{true}
+
+% Tightened from the class defaults to hold everything on one page.
+\renewcommand{\acvSectionTopSkip}{2.2mm}
+\renewcommand{\acvSectionContentTopSkip}{1.6mm}
+\renewcommand{\acvHeaderAfterSocialSkip}{4mm}
+\renewcommand{\acvHeaderAfterQuoteSkip}{3.5mm}
+
+\renewcommand{\acvHeaderSocialSep}{\quad\textbar\quad}
+
+%-------------------------------------------------------------------------------
+%  PERSONAL INFORMATION
+%-------------------------------------------------------------------------------
+\name{Jasper}{Blank}
+\position{Control \& Embedded Systems{\enskip\cdotp\enskip}Medical Devices \& Robotics}
+\address{Enschede, Netherlands}
+
+\email{jasper.j.blank@gmail.com}
+\homepage{jasperblank.com}
+\linkedin{jasper-blank}
+
+\begin{document}
+
+\makecvheader
+
+\makecvfooter
+  {}
+  {Jasper Blank{\enskip\cdotp\enskip}Curriculum Vitae}
+  {\thepage}
+
+%-------------------------------------------------------------------------------
+%  PROFILE
+%-------------------------------------------------------------------------------
+\cvsection{Profile}
+
+\begin{cvparagraph}
+Biomedical engineer finishing an MSc in Biorobotics at the University of Twente, building a surgical
+end-effector for my thesis and, before it, taking a patient-warming device from open-loop to
+closed-loop control. I work across the boundary between simulation, firmware and test.
+\end{cvparagraph}
+
+%-------------------------------------------------------------------------------
+%  EXPERIENCE
+%-------------------------------------------------------------------------------
+\cvsection{Experience}
+
+\begin{cventries}
+
+\cventry
+  {R\&D Intern{\enskip\cdotp\enskip}Closed-loop control for the Mistral Air MA1200 surgical warming system{\enskip\cdotp\enskip}graded 8/10}
+  {TSC Life Sciences}
+  {Amersfoort, NL}
+  {Feb -- May 2026}
+  {
+    \begin{cvitems}
+      \item {Replaced open-loop operation with a \textbf{two-layer cascade controller}: fast inner loop on skin temperature, slow outer loop correcting the setpoint from a core-temperature estimate.}
+      \item {Derived an \textbf{LTI reduction of a 23-state Fiala thermoregulation model}, validated to 0.05\,\textdegree C RMS against the non-linear reference, and used it as the design plant.}
+      \item {Built a \textbf{model predictive controller} in simulation and benchmarked it against the tuned PID over a full surgery scenario.}
+      \item {Wrote and flashed \textbf{custom firmware} over UPDI, tracing the ADC path through an unfamiliar legacy codebase to read two thermistors added on unused board channels.}
+      \item {Validated to the \textbf{IEC 60601-2-35 Annex CC} thermal-load procedure: 182 minutes closed-loop, outlet held at $\sigma = 0.030$\,\textdegree C.}
+      \item {Designed an \textbf{isolated thermistor front-end} to IEC 60601-1 Type BF (2\texttimes\ MOPP, 4\,kV, 8\,mm creepage) with a costed bill of materials.}
+    \end{cvitems}
+  }
+
+\cventry
+  {Treasurer}
+  {Z.P.V. Piranha}
+  {Enschede, NL}
+  {Jul 2023 -- Sep 2024}
+  {
+    \begin{cvitems}
+      \item {Budgeting, bookkeeping and financial reporting for a 400-member association with annual cashflow above \euro50,000 (Davilex, Visma).}
+      \item {Board member for strategic and operational decisions, reporting to members and external stakeholders.}
+    \end{cvitems}
+  }
+
+\cventry
+  {Swimming Instructor \& Lifeguard{\enskip\cdotp\enskip}sole responsibility for pool safety on unsupervised shifts}
+  {University of Twente}
+  {Enschede, NL}
+  {Mar 2023 -- present}
+  {}
+
+\end{cventries}
+
+%-------------------------------------------------------------------------------
+%  EDUCATION
+%-------------------------------------------------------------------------------
+\cvsection{Education}
+
+\begin{cventries}
+
+\cventry
+  {MSc Biorobotics}
+  {University of Twente}
+  {Enschede, NL}
+  {2024 -- present}
+  {
+    \begin{cvitems}
+      \item {\textbf{Thesis (in progress), Surgical Robotics Lab:} an Ø8\,mm dual-endoscope probe for needle-based vessel targeting. Built the probe, PDMS phantoms, stereo vision and motor control, with a first guarded approach to a vessel on hardware. In a digital twin, two cameras reached the target in 20/20 closed-loop runs, one camera in 0/20; physical trials next.}
+    \end{cvitems}
+  }
+
+\cventry
+  {BSc Biomedical Engineering}
+  {University of Twente}
+  {Enschede, NL}
+  {2019 -- 2024}
+  {
+    \begin{cvitems}
+      \item {Final project: designed and tested miniature low-cracking-pressure check valves for an incubator-compatible pump intended for blood-mimicking in-vitro flow models. SolidWorks, actuation and flow-rate control.}
+    \end{cvitems}
+  }
+
+\end{cventries}
+
+%-------------------------------------------------------------------------------
+%  PROJECTS
+%-------------------------------------------------------------------------------
+\cvsection{Projects}
+
+\begin{cventries}
+
+\cventry
+  {Auditable claim-source mapping}
+  {Epistack}
+  {jasperblank.com/epistack}
+  {}
+  {
+    \begin{cvitems}
+      \item {Decomposes a confidence figure into a reader-owned prior plus source-grounded updates, so every shift traces to a verbatim quotation and a stated reason. Modular Python pipeline with offline tests.}
+    \end{cvitems}
+  }
+
+\cventry
+  {Eight published browser games}
+  {Game jams}
+  {jasperblank.itch.io}
+  {}
+  {
+    \begin{cvitems}
+      \item {Released across GameMaker and Godot, several built inside 72-hour jams — solo and with a recurring art collaborator, taking the technical development role. \textbf{Two third-place jam finishes.} AI assistance disclosed per project.}
+    \end{cvitems}
+  }
+
+\cventry
+  {Search engine and solver}
+  {1D Chess}
+  {jasperblank.com/1d-chess}
+  {}
+  {
+    \begin{cvitems}
+      \item {Game-tree search with transposition tables, killer-move ordering and late move reduction, benchmarked against MCTS.}
+    \end{cvitems}
+  }
+
+\end{cventries}
+
+%-------------------------------------------------------------------------------
+%  SKILLS
+%-------------------------------------------------------------------------------
+\cvsection{Skills}
+
+\begin{cvskills}
+
+\cvskill
+  {Control \& Modelling}
+  {PID and cascade control, model predictive control, Kalman filtering, system identification, state-space modelling, constrained optimisation (SLSQP)}
+
+\cvskill
+  {Perception}
+  {Stereo vision and depth resolution, camera calibration (AprilTag), signal processing, closed-loop visual servoing}
+
+\cvskill
+  {Software}
+  {Python, C/C++, MATLAB \& Simulink, JavaScript, GDScript{\enskip\cdotp\enskip}Git, Godot, \LaTeX{\enskip\cdotp\enskip}AI coding agents}
+
+\cvskill
+  {Hardware}
+  {Embedded firmware, microcontroller ADC and sensor interfacing, schematic reading, mechatronics prototyping, SolidWorks{\enskip\cdotp\enskip}IEC 60601-1 and -2-35 familiarity (not a certification)}
+
+\cvskill
+  {Other}
+  {BHV (emergency response), Red Cross first aid, open-water lifeguard{\enskip\cdotp\enskip}Dutch (native), English (fluent)}
+
+\end{cvskills}
+
+\end{document}
