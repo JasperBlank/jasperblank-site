@@ -109,8 +109,8 @@ export default function PersonalWebsite() {
           className="text-center max-w-2xl"
         >
           <h1 className="text-4xl sm:text-6xl font-bold mb-4">Jasper Blank</h1>
-          <p className="text-xl sm:text-2xl text-gray-600 dark:text-gray-300">
-            AI engineer with a robotics background. I build with AI agents and research how AI models work on the inside.
+          <p className="text-xl sm:text-2xl text-balance text-gray-600 dark:text-gray-300">
+            Robotics engineer moving into AI safety. I research how AI models work on the inside and where their values come from.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <Button variant="default" size="lg" asChild>
