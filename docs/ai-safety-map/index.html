@@ -93,7 +93,8 @@ body{margin:0;background:var(--paper);color:var(--text);font:16px/1.5 var(--sans
 .where{font:500 12.5px var(--sans);color:#2c5f7c;background:none;border:0;padding:0;cursor:pointer;text-align:left}
 .where:hover{text-decoration:underline}
 .it p{margin:0;font-size:15.5px;line-height:1.45;color:var(--text)}
-.it.flash{background:#fff3c4;box-shadow:0 0 0 8px #fff3c4;transition:background 1.2s,box-shadow 1.2s}
+.it.flash,.q.flash{background:#fff3c4;box-shadow:0 0 0 8px #fff3c4;transition:background 1.2s,box-shadow 1.2s}
+.qbud{cursor:pointer;outline:none}.qbud .fhit{fill:transparent}.qbud:hover path,.qbud:focus-visible path{filter:brightness(1.08) saturate(1.3)}
 .q .qt{font:500 20px/1.3 var(--serif);color:var(--ink);margin:0 0 4px}
 .q .qb{font-size:13.5px;color:var(--faint);margin:0 0 4px}
 .q a{color:#2c5f7c;text-decoration:none}
@@ -185,7 +186,7 @@ function qlist(n){return n._ql||(n._ql=[...n.qs].sort((a,b)=>b.items.length-a.it
 function parts(n){if(n._parts)return n._parts;
   const ps=n.kids.map(k=>({node:k,name:label(k),count:k.count,set:k.items}));
   if(n.kids.length){const inKid=new Set();n.kids.forEach(k=>k.items.forEach(i=>inKid.add(i)));const rest=[...n.items].filter(i=>!inKid.has(i));if(rest.length)ps.push({node:null,name:'General',count:rest.length,set:new Set(rest)})}
-  const tot=d3.sum(ps,p=>p.count)||1;let a=-Math.PI/2;ps.forEach((p,i)=>{p.i=i;p.a0=a;a+=2*Math.PI*p.count/tot;p.a1=a});return n._parts=ps}
+  const wt=p=>Math.max(Math.sqrt(p.count),.35*Math.sqrt(d3.max(ps,q=>q.count)||1)),tot=d3.sum(ps,wt)||1;let a=-Math.PI/2;ps.forEach((p,i)=>{p.i=i;p.a0=a;a+=2*Math.PI*wt(p)/tot;p.a1=a});return n._parts=ps}
 
 /* ---------------- drawing ---------------- */
 // A flower: one petal per sub-area, sized by its share; a golden centre (a large pale one for the big flowers, which carry their name).
@@ -221,11 +222,14 @@ function drawDisc(g,n,r,hub){const R=rng(hash(n.id)),ps=parts(n),col=d3.color(n.
       front.append('path').attr('d',petalRound(a,b,r*core*.8,r*len*(.97+.05*R()))).attr('fill',`url(#${id})`).attr('stroke',col.darker(.5).formatHex()).attr('stroke-width',1.6).attr('stroke-opacity',.35).attr('stroke-linejoin','round')});
   }else if(PETALS==='fan'){
     // each sub-area is a little fan of slender petals: more papers, more petals; neighbouring sub-areas alternate in shade
-    const total=d3.sum(petals,q=>q.share)||1,budget=Math.round(18+r*.28);
-    petals.forEach((q,i)=>{const k=Math.max(2,Math.min(16,Math.round(budget*q.share/total))),span=q.a1-q.a0,h=Math.min(.16,span/k*.42),shade=d3.interpolateRgb(col,'#fffaf0')(i%2?.32:.05),
-      len=(hub?.82:.72)+(hub?.18:.28)*Math.sqrt(q.share/mx);
-      for(let j=0;j<k;j++){const m=q.a0+span*(j+.5)/k;front.append('path').attr('d',petalThin(m,h,r*core*.85,r*len*(.9+.12*R()))).attr('fill',shade).attr('stroke',col.darker(.6).formatHex()).attr('stroke-width',.45).attr('stroke-opacity',.45)}
-      if(petals.length>1)front.append('path').attr('d',`M${Math.cos(q.a0)*r*core},${Math.sin(q.a0)*r*core} L${Math.cos(q.a0)*r*.98},${Math.sin(q.a0)*r*.98}`).attr('stroke',col.darker(.4).formatHex()).attr('stroke-width',.5).attr('stroke-opacity',.25)});
+    const dens=Math.round(18+r*.28)/(2*Math.PI),split=petals.length>1;
+    petals.forEach((q,i)=>{const span=q.a1-q.a0,gap=split?Math.min(.07,span*.12):0,a0=q.a0+gap,a1=q.a1-gap,w=a1-a0,
+      k=Math.max(2,Math.min(30,Math.round(dens*w))),h=Math.min(.16,w/k*.46),shade=d3.interpolateRgb(col,'#fffaf0')(split&&i%2?.45:0),
+      dark=col.darker(i%2?.3:.8).formatHex(),len=(hub?.82:.72)+(hub?.18:.28)*Math.sqrt(q.share/mx);
+      for(let j=0;j<k;j++){const m=a0+w*(j+.5)/k;front.append('path').attr('d',petalThin(m,h,r*core*.85,r*len*(.9+.12*R()))).attr('fill',shade).attr('stroke',col.darker(.6).formatHex()).attr('stroke-width',.45).attr('stroke-opacity',.45)}
+      // a thin arc just outside the fan shows where this sub-area begins and ends
+      if(split&&r>40)front.append('path').attr('d',d3.arc()({innerRadius:r*1.03,outerRadius:r*1.03+Math.max(2,r*.022),startAngle:a0+Math.PI/2,endAngle:a1+Math.PI/2,cornerRadius:2}))
+        .attr('fill',dark).attr('opacity',.55)});
   }else if(PETALS==='wash'){
     front.attr('filter','url(#wcp)').style('mix-blend-mode','multiply');
     petals.forEach(q=>{const len=(hub?.8:.66)+(hub?.22:.34)*Math.sqrt(q.share/mx),a=q.a0+(q.a1-q.a0)*.03,b=q.a1-(q.a1-q.a0)*.03,d=petalBlob(a,b,r*core*.8,r*len,R);
@@ -317,7 +321,7 @@ function build(){
     t.append('text').attr('class','meta').attr('y',232).text('Click a flower to open it and read everything inside. Updated '+esc(D.updated)+'.');
     const k=gDeco.append('g').attr('transform','translate(1010,850)');
     [['disc','The size of a flower is the number of papers (the smallest are drawn a little larger, so they stay readable).'],['crack','Each fan of petals is a sub-area; more petals, more papers.'],
-     ['thread','Each bud on a stem is about twelve open questions: what the field has not answered yet.'],['speck','A small green petal is a paper from this week. Click one to read it.']].forEach((r,i,all)=>{
+     ['thread','Each bud on a stem is about twelve open questions: what the field has not answered yet. Open a flower and click a bud to read them.'],['speck','A small green petal is a paper from this week. Click one to read it.']].forEach((r,i,all)=>{
       const y=all.slice(0,i).reduce((s,q)=>s+wrapWords(q[1],50).length*18+10,0),g=k.append('g').attr('transform',`translate(0,${y})`);
       if(r[0]==='disc'){g.append('circle').attr('cx',9).attr('cy',-4).attr('r',9).attr('fill','#f2b84b').attr('opacity',.35);g.append('circle').attr('cx',9).attr('cy',-4).attr('r',3.2).attr('fill','#f3c95a').attr('stroke','#d9a03a').attr('stroke-width',.6)}
       if(r[0]==='crack'){const pg=g.append('g').attr('transform','translate(9,-4)');[0,1,2,3,4].forEach(i=>pg.append('path').attr('d',petal(-Math.PI/2+i*1.2566,-Math.PI/2+(i+1)*1.2566,2.5,i%2?7:10)).attr('fill','#f39a5f').attr('opacity',.75))}
@@ -331,15 +335,29 @@ function build(){
 function buildDetail(n){
   const st=L.stage,r=st.r,ps=parts(n),R=rng(hash(n.id)+7),g=gDetail.append('g').attr('class','dnode').style('--col',n.col);
   const inner=g.append('g').attr('transform',`translate(${st.x},${st.y})`);
-  // stems: this node's open questions as buds, gathering under the flower into a small bouquet
-  const per=Math.max(1,Math.ceil(n.oq/46)),nt=n.oq?Math.max(1,Math.round(n.oq/per)):0,th=inner.append('g').attr('class','dth'),neck=[0,r+(L.m?34:62)],rl=L.m?44:88;
-  for(let i=0;i<nt;i++){const ang=Math.PI/2+(i/(Math.max(1,nt-1))-.5)*2.5+(R()-.5)*.12,rr=r*(1.12+.16*R()),sx=Math.cos(ang)*rr,sy=Math.sin(ang)*rr;
+  // stems through the bow: open questions as buds; click a bud to read the questions it stands for
+  const ql=qlist(n),per=Math.max(1,Math.ceil(n.oq/46)),nt=n.oq?Math.ceil(n.oq/per):0,th=inner.append('g').attr('class','dth'),neck=[0,r+(L.m?34:62)],rl=L.m?44:88;
+  for(let i=0;i<nt;i++){const ang=Math.PI/2+(nt>1?(i/(nt-1)-.5)*2.5:0)+(R()-.5)*.12,rr=r*(1.12+.16*R()),sx=Math.cos(ang)*rr,sy=Math.sin(ang)*rr,grp=ql.slice(i*per,(i+1)*per);
     const pts=[[sx,sy],[sx*.85+(R()-.5)*10,sy+(neck[1]-sy)*.35],[sx*.3+(R()-.5)*14,neck[1]-12],[(R()-.5)*8,neck[1]],[(R()-.5)*22,neck[1]+rl*(.45+.4*R())]];
     th.append('path').attr('d',basis(pts)).attr('fill','none').attr('stroke','#6f9a5a').attr('stroke-width',.9+R()*.5).attr('opacity',.75);
-    bud(th,sx,sy,ang,L.m?3.2:4.4,n.col)}
+    const b=th.append('g').attr('class','qbud').attr('tabindex',0).attr('role','link').attr('aria-label','Open question: '+(grp[0]?grp[0].q:''));
+    b.append('circle').attr('cx',sx).attr('cy',sy).attr('r',L.m?8:10).attr('class','fhit');
+    bud(b,sx,sy,ang,L.m?3.2:4.4,n.col);
+    b.append('title').text((grp[0]?grp[0].q:'')+(grp.length>1?`\n…and ${grp.length-1} more. Click to read them.`:'\nClick to read it.'));
+    const open=e=>{e.stopPropagation();if(e.preventDefault)e.preventDefault();focusQuestions(grp)};
+    b.on('click',open).on('keydown',e=>{if(e.key==='Enter'||e.key===' ')open(e)})}
   if(nt){for(let i=0;i<3;i++)leaf(th,(i-1)*14,neck[1]+18+i*10,Math.PI/2+(i-1)*.9,L.m?10:15);bow(th,0,neck[1]+2,L.m?.5:.7)}
   if(n.oq){const rl2=inner.append('g').attr('class','rootl').attr('transform',`translate(${L.m?26:34},${neck[1]+rl*.55})`).on('click',()=>{setTab('q');if(L.m)document.querySelector('.tabs').scrollIntoView()});
-    rl2.append('text').text(fmt(n.oq)+' open question'+(n.oq===1?'':'s'));rl2.append('text').attr('class','meta').attr('y',17).text(per>1?'one bud for every '+per+' · read them':'one bud each · read them')}
+    rl2.append('text').text(fmt(n.oq)+' open question'+(n.oq===1?'':'s'));rl2.append('text').attr('class','meta').attr('y',17).text(per>1?'one bud for every '+per+' · click a bud to read them':'one bud each · click a bud to read it')}
+  // this week's papers: small green petals in a ring round the top of the flower; click one to read it
+  const fresh=list(n).filter(i=>i.fresh).slice(0,80),fg=inner.append('g').attr('class','fresh');
+  fresh.forEach((it,i)=>{const span=2*Math.PI-2.9,ang=Math.PI/2+1.45+(fresh.length>1?i/(fresh.length-1):.5)*span+(R()-.5)*.03,rr=r*(1.1+.07*R())+6,x=Math.cos(ang)*rr,y=Math.sin(ang)*rr,s2=L.m?4.2:5.4;
+    const f=fg.append('g').attr('class','freshp').attr('transform',`translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(ang*180/Math.PI+90+(R()-.5)*50).toFixed(0)})`).attr('tabindex',0).attr('role','link').attr('aria-label','New this week: '+it.t);
+    f.append('circle').attr('r',s2*1.7).attr('class','fhit');
+    f.append('path').attr('d',`M0,${s2} C${s2*.8},${s2*.2} ${s2*.6},${-s2*.9} 0,${-s2*1.2} C${-s2*.6},${-s2*.9} ${-s2*.8},${s2*.2} 0,${s2}Z`).attr('fill','#5fae6e').attr('stroke','#2f7d4a').attr('stroke-width',.6);
+    f.append('title').text(it.t+'\nNew this week · '+it.s+'. Click to read it.');
+    const open=e=>{e.stopPropagation();if(e.preventDefault)e.preventDefault();focusItem(it)};
+    f.on('click',open).on('keydown',e=>{if(e.key==='Enter'||e.key===' ')open(e)})});
   drawDisc(inner.append('g'),n,r,0);
   // sectors you can point at and click
   const arc=d3.arc(),toArc=a=>a+Math.PI/2, hl=(i,on)=>g.selectAll('.p'+i).classed('on',on);
@@ -450,7 +468,7 @@ function refresh(){const n=cur;if(!n)return;const s=panel.querySelector('#find')
 function place(it,n){for(const id of it.n){let x=byId.get(id);for(let y=x;y;y=y.par)if(y===n)return x}return null}
 function itemHTML(it,n){const pl=place(it,n);return `<article class="it" id="it-${hash(it.id)}"><a class="t" href="${href(it.u)}" target="_blank" rel="noopener">${esc(it.t)}</a>
   <div class="im"><span>${date(it.d)}</span><span>· ${esc(it.s)}</span>${it.fresh?'<span class="new">· new this week</span>':''}${pl&&pl!==n?`<span>·</span><button class="where" data-go="${esc(pl.id)}">${esc(label(pl))}</button>`:''}</div>${it.m?`<p>${esc(it.m)}</p>`:''}</article>`}
-function qHTML(q){const b=q.by[0]||{},k=q.items.length;return `<article class="q"><p class="qt">${esc(q.q)}</p>
+function qHTML(q){const b=q.by[0]||{},k=q.items.length;return `<article class="q" id="q-${hash(q.id)}"><p class="qt">${esc(q.q)}</p>
   <div class="qb">Asked ${b.a&&b.a.length?'by '+esc(b.a.slice(0,3).join(', '))+(b.a.length>3?' and others':'')+' ':''}in <a href="${href(b.u)}" target="_blank" rel="noopener">${esc(b.t||'source')}</a>${b.d?', '+date(b.d):''}${q.by.length>1?` and ${q.by.length-1} other place${q.by.length>2?'s':''}`:''}</div>
   ${b.x?`<details><summary>In their words</summary><blockquote>${esc(b.x)}</blockquote></details>`:''}
   ${k?`<details><summary>${k} paper${k>1?'s':''} here work${k>1?'':'s'} on this</summary><ul>${q.items.map(it=>`<li><a href="${href(it.u)}" target="_blank" rel="noopener">${esc(it.t)}</a> <span class="qb">${date(it.d)}</span></li>`).join('')}</ul></details>`:'<span class="none">No paper on the map works on this yet</span>'}</article>`}
@@ -458,6 +476,10 @@ function more(upTo){if(!cur)return;const n=cur,el=panel.querySelector('#list');i
   el.insertAdjacentHTML('beforeend',view.arr.slice(view.shown,end).map(x=>view.kind==='p'?itemHTML(x,n):qHTML(x)).join(''));view.shown=end}
 function focusItem(it){if(tab!=='p'||panel.querySelector('#find').value){panel.querySelector('#find').value='';setTab('p')}
   const i=view.arr.indexOf(it);if(i<0)return;more(i+1);const el=document.getElementById('it-'+hash(it.id));if(!el)return;el.scrollIntoView({block:'center',behavior:RM?'auto':'smooth'});el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1400)}
+function focusQuestions(qs){if(!qs.length)return;panel.querySelector('#find').value='';panel.querySelector('#un').checked=false;setTab('q');
+  const idx=qs.map(q=>view.arr.indexOf(q)).filter(i=>i>=0);if(!idx.length)return;more(Math.max(...idx)+1);
+  const els=qs.map(q=>document.getElementById('q-'+hash(q.id))).filter(Boolean);if(!els.length)return;
+  els[0].scrollIntoView({block:'start',behavior:RM?'auto':'smooth'});els.forEach(el=>{el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1800)})}
 panel.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
 // belt and braces for the endless list: also load more on scroll, in case the observer is slow to report
 const near=()=>{const m=document.getElementById('more');if(m&&cur&&m.getBoundingClientRect().top<innerHeight+600)more()};
@@ -466,7 +488,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&cur&&document.activeElement.
 addEventListener('hashchange',()=>route());
 let rz,lastM;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if((innerWidth<900)!==lastM){lastM=innerWidth<900;build();const c=cur;cur=null;show(null,c,false)}},150)});
 
-fetch('data.json?v=202611191852').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
+fetch('data.json?v=202611191902').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
   svg.attr('viewBox',`0 0 ${L.W} ${L.Hov}`);const id=decodeURIComponent(location.hash.slice(1));show(null,byId.get(id)||null,false);document.documentElement.setAttribute('data-ready','1')})
  .catch(e=>{document.getElementById('load').textContent='Could not load the map data ('+e.message+'). Try reloading the page.';throw e});
 </script>
