@@ -196,6 +196,8 @@ const PETALS=(new URLSearchParams(location.search).get('petals')||'fan');
 function petalRound(a0,a1,r0,r1){const m=(a0+a1)/2,h=Math.max(.14,Math.min(.75,(a1-a0)*.5)),P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2),d=r1-r0;
   return `M${P(m,r0)} C${P(m-h*1.25,r0+d*.4)} ${P(m-h*1.05,r0+d*.98)} ${P(m-h*.4,r1)} Q${P(m,r1*.9)} ${P(m+h*.4,r1)} C${P(m+h*1.05,r0+d*.98)} ${P(m+h*1.25,r0+d*.4)} ${P(m,r0)}Z`}
 // slender pointed petal (daisy-like), width given as a half-angle
+// petal colour: a lightness step from the area colour, capped well below the paper (about 97), with a floor on colourfulness
+function tone(c,step,cap){const h=d3.hcl(c),base=Math.min(h.l,66);h.l=Math.min(base+step,cap);h.c=Math.max(h.c,30);return h.formatHex()}
 function petalThin(m,h,r0,r1){const P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2),d=r1-r0;
   return `M${P(m,r0)} C${P(m-h,r0+d*.3)} ${P(m-h*.8,r0+d*.85)} ${P(m,r1)} C${P(m+h*.8,r0+d*.85)} ${P(m+h,r0+d*.3)} ${P(m,r0)}Z`}
 // loose, rounder blob for the watercolour style
@@ -224,9 +226,9 @@ function drawDisc(g,n,r,hub){const R=rng(hash(n.id)),ps=parts(n),col=d3.color(n.
     // each sub-area is a little fan of slender petals: more papers, more petals; neighbouring sub-areas alternate in shade
     const dens=Math.round(18+r*.28)/(2*Math.PI),split=petals.length>1;
     petals.forEach((q,i)=>{const span=q.a1-q.a0,gap=split?Math.min(.07,span*.12):0,a0=q.a0+gap,a1=q.a1-gap,w=a1-a0,
-      k=Math.max(2,Math.min(30,Math.round(dens*w))),h=Math.min(.16,w/k*.46),shade=d3.interpolateRgb(col,'#fffaf0')(split&&i%2?.45:0),
+      k=Math.max(2,Math.min(30,Math.round(dens*w))),h=Math.min(.16,w/k*.46),shade=tone(col,split&&i%2?13:0,split&&i%2?79:66),
       dark=col.darker(i%2?.3:.8).formatHex(),len=(hub?.82:.72)+(hub?.18:.28)*Math.sqrt(q.share/mx);
-      for(let j=0;j<k;j++){const m=a0+w*(j+.5)/k;front.append('path').attr('d',petalThin(m,h,r*core*.85,r*len*(.9+.12*R()))).attr('fill',shade).attr('stroke',col.darker(.6).formatHex()).attr('stroke-width',.45).attr('stroke-opacity',.45)}
+      for(let j=0;j<k;j++){const m=a0+w*(j+.5)/k;front.append('path').attr('d',petalThin(m,h,r*core*.85,r*len*(.9+.12*R()))).attr('fill',shade).attr('stroke',tone(col,-20,46)).attr('stroke-width',.55).attr('stroke-opacity',.6)}
       // a thin arc just outside the fan shows where this sub-area begins and ends
       if(split&&r>40)front.append('path').attr('d',d3.arc()({innerRadius:r*1.03,outerRadius:r*1.03+Math.max(2,r*.022),startAngle:a0+Math.PI/2,endAngle:a1+Math.PI/2,cornerRadius:2}))
         .attr('fill',dark).attr('opacity',.55)});
@@ -488,7 +490,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&cur&&document.activeElement.
 addEventListener('hashchange',()=>route());
 let rz,lastM;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if((innerWidth<900)!==lastM){lastM=innerWidth<900;build();const c=cur;cur=null;show(null,c,false)}},150)});
 
-fetch('data.json?v=202611191902').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
+fetch('data.json?v=202611191914').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
   svg.attr('viewBox',`0 0 ${L.W} ${L.Hov}`);const id=decodeURIComponent(location.hash.slice(1));show(null,byId.get(id)||null,false);document.documentElement.setAttribute('data-ready','1')})
  .catch(e=>{document.getElementById('load').textContent='Could not load the map data ('+e.message+'). Try reloading the page.';throw e});
 </script>
