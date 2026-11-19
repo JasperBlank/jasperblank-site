@@ -35,6 +35,8 @@ body{margin:0;background:var(--paper);color:var(--text);font:16px/1.5 var(--sans
 .ink *{vector-effect:non-scaling-stroke}
 .bloom{cursor:pointer;outline:none}
 .bloom .hit{fill:transparent}
+.freshp{cursor:pointer;outline:none}.freshp .fhit{fill:transparent}.freshp path{transition:transform .15s;transform-box:fill-box;transform-origin:center}
+.freshp:hover path,.freshp:focus-visible path{transform:scale(1.6);fill:#3f9a5c}
 .bloom:focus-visible .hit{stroke:var(--ink);stroke-width:2;stroke-dasharray:3 4;vector-effect:non-scaling-stroke}
 .bloom .lab,#threads,#ovdeco,#washov{transition:opacity .35s ease}
 .bloom .railname{opacity:0;font:600 13px var(--sans);fill:var(--ink);paint-order:stroke;stroke:#f8f2e2;stroke-width:4px;pointer-events:none;transition:opacity .15s}
@@ -113,7 +115,7 @@ body{margin:0;background:var(--paper);color:var(--text);font:16px/1.5 var(--sans
  <header class="mhead"><h1>A live map of AI safety research</h1><p id="msub"></p></header>
  <div id="load">Loading the map…</div>
  <svg id="stage" role="img" aria-label="Areas of AI safety research drawn as a bouquet of flowers. Choose one to open it."></svg>
- <p class="mkey">Tap a flower to open it. The size of a flower is the number of papers; each fan of petals is a sub-area; green dots are papers from this week; the buds are open questions.</p>
+ <p class="mkey">Tap a flower to open it. The size of a flower is the number of papers; each fan of petals is a sub-area; the small green petals are this week's papers (tap one to read it); the buds are open questions.</p>
  <aside id="panel" aria-live="polite"></aside>
 </div>
 <script>
@@ -157,7 +159,7 @@ const DEFS = `
 const PAPER = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .27 0 0 0 0 .18 0 0 0 .45 -.16'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23p)'/%3E%3C/svg%3E")`;
 document.body.style.backgroundImage = PAPER;
 
-let D, byId, AREAS, L, cur = null, tab = 'p', savedScroll = 0;
+let D, byId, AREAS, L, cur = null, tab = 'p', savedScroll = 0, pendingFocus = null;
 const app = document.getElementById('app'), svg = d3.select('#stage'), panel = document.getElementById('panel');
 
 /* ---------------- data ---------------- */
@@ -288,7 +290,15 @@ function build(){
   // blooms
   AREAS.forEach(a=>{const g=a.g=gBlooms.append('g').attr('class','bloom').attr('tabindex',0).attr('role','button').attr('aria-label',label(a)+', '+metaTxt(a)).attr('transform',`translate(${a.x},${a.y}) scale(1)`);
     const big=a.side==='in';drawDisc(g.append('g'),a,a.cr,big?.7:0);
-    const Q=rng(a.count);for(let i=0;i<a.fresh;i++){const an=Q()*6.283,rr=a.cr+a.cr*.08+5+Q()*(L.m?7:13);g.append('circle').attr('cx',Math.cos(an)*rr).attr('cy',Math.sin(an)*rr).attr('r',1.6+Q()*1.2).attr('fill','#3f9a5c').attr('opacity',.85)}
+    // this week's papers: tiny petals drifting round the flower; each opens the flower at that paper
+    const Q=rng(a.count),fr=list(a).filter(i=>i.fresh),fg=g.append('g').attr('class','fresh');
+    fr.forEach((it,i)=>{const an=(i+Q()*.6)/Math.max(1,fr.length)*6.283,rr=a.cr*1.1+6+Q()*(L.m?6:12),x=Math.cos(an)*rr,y=Math.sin(an)*rr,s=L.m?4.2:5.2,rot=an*180/Math.PI+90+(Q()-.5)*70;
+      const f=fg.append('g').attr('class','freshp').attr('transform',`translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${rot.toFixed(0)})`).attr('tabindex',0).attr('role','link').attr('aria-label','New this week: '+it.t);
+      f.append('circle').attr('r',s*1.7).attr('class','fhit');
+      f.append('path').attr('d',`M0,${s} C${s*.8},${s*.2} ${s*.6},${-s*.9} 0,${-s*1.2} C${-s*.6},${-s*.9} ${-s*.8},${s*.2} 0,${s}Z`).attr('fill','#5fae6e').attr('stroke','#2f7d4a').attr('stroke-width',.6);
+      f.append('title').text(it.t+'\nNew this week · '+it.s+'. Click to read it.');
+      const open=e=>{e.stopPropagation();if(e.preventDefault)e.preventDefault();if(cur===a){focusItem(it)}else{pendingFocus=it;go(a.id)}};
+      f.on('click',open).on('keydown',e=>{if(e.key==='Enter'||e.key===' ')open(e)})});
     g.append('circle').attr('class','hit').attr('r',a.cr+8);
     g.append('title').text(label(a)+': '+(a.one||''));
     const lab=g.append('g').attr('class','lab');
@@ -307,12 +317,12 @@ function build(){
     t.append('text').attr('class','meta').attr('y',232).text('Click a flower to open it and read everything inside. Updated '+esc(D.updated)+'.');
     const k=gDeco.append('g').attr('transform','translate(1010,850)');
     [['disc','The size of a flower is the number of papers (the smallest are drawn a little larger, so they stay readable).'],['crack','Each fan of petals is a sub-area; more petals, more papers.'],
-     ['thread','Each bud on a stem is about twelve open questions: what the field has not answered yet.'],['speck','A green dot is a paper that appeared this week.']].forEach((r,i,all)=>{
+     ['thread','Each bud on a stem is about twelve open questions: what the field has not answered yet.'],['speck','A small green petal is a paper from this week. Click one to read it.']].forEach((r,i,all)=>{
       const y=all.slice(0,i).reduce((s,q)=>s+wrapWords(q[1],50).length*18+10,0),g=k.append('g').attr('transform',`translate(0,${y})`);
       if(r[0]==='disc'){g.append('circle').attr('cx',9).attr('cy',-4).attr('r',9).attr('fill','#f2b84b').attr('opacity',.35);g.append('circle').attr('cx',9).attr('cy',-4).attr('r',3.2).attr('fill','#f3c95a').attr('stroke','#d9a03a').attr('stroke-width',.6)}
       if(r[0]==='crack'){const pg=g.append('g').attr('transform','translate(9,-4)');[0,1,2,3,4].forEach(i=>pg.append('path').attr('d',petal(-Math.PI/2+i*1.2566,-Math.PI/2+(i+1)*1.2566,2.5,i%2?7:10)).attr('fill','#f39a5f').attr('opacity',.75))}
       if(r[0]==='thread'){g.append('path').attr('d','M2,6 Q8,-2 14,-10').attr('stroke','#6f9a5a').attr('stroke-width',1).attr('fill','none');bud(g,14,-10,-.9,3.2,'#9b8fe0')}
-      if(r[0]==='speck')g.append('circle').attr('cx',8).attr('cy',-4).attr('r',2.8).attr('fill','#3f9a5c');
+      if(r[0]==='speck')g.append('path').attr('transform','translate(8,-4) rotate(30)').attr('d','M0,5 C4,1 3,-4.5 0,-6 C-3,-4.5 -4,1 0,5Z').attr('fill','#5fae6e').attr('stroke','#2f7d4a').attr('stroke-width',.6);
       textLines(g,wrapWords(r[1],50),30,0,18,'key')})}
   d3.select('#msub').text(`${fmt(D.items.length)} papers and posts in ${AREAS.length} areas, ${fmt(D.questions.length)} open questions`);
 }
@@ -379,6 +389,7 @@ function show(prev,next,animate){
   svg.attr('viewBox',`0 0 ${L.W} ${L.Hde}`);app.classList.add('detail');if(!sameTop||L.m)scrollTo(0,0);
   document.title=label(next)+' · AI safety map';
   fillPanel(next);
+  if(pendingFocus){const it=pendingFocus;pendingFocus=null;setTimeout(()=>focusItem(it),dur+200)}
   const wash=buildWash(next),g=buildDetail(next);
   if(sameTop){ // into or out of a sub-area: zoom through the sector
     let from=null,to=null;const sector=(par,child)=>{const p=parts(par).find(q=>q.node===child);if(!p)return null;const a=(p.a0+p.a1)/2;return [st.x+Math.cos(a)*st.r*.6,st.y+Math.sin(a)*st.r*.6]};
@@ -455,7 +466,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&cur&&document.activeElement.
 addEventListener('hashchange',()=>route());
 let rz,lastM;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if((innerWidth<900)!==lastM){lastM=innerWidth<900;build();const c=cur;cur=null;show(null,c,false)}},150)});
 
-fetch('data.json?v=202611191848').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
+fetch('data.json?v=202611191852').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
   svg.attr('viewBox',`0 0 ${L.W} ${L.Hov}`);const id=decodeURIComponent(location.hash.slice(1));show(null,byId.get(id)||null,false);document.documentElement.setAttribute('data-ready','1')})
  .catch(e=>{document.getElementById('load').textContent='Could not load the map data ('+e.message+'). Try reloading the page.';throw e});
 </script>
