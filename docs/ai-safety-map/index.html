@@ -113,7 +113,7 @@ body{margin:0;background:var(--paper);color:var(--text);font:16px/1.5 var(--sans
  <header class="mhead"><h1>A live map of AI safety research</h1><p id="msub"></p></header>
  <div id="load">Loading the map…</div>
  <svg id="stage" role="img" aria-label="Areas of AI safety research drawn as a bouquet of flowers. Choose one to open it."></svg>
- <p class="mkey">Tap a flower to open it. The size of a flower is the number of papers; its petals are the sub-areas; green dots are papers from this week; the buds are open questions.</p>
+ <p class="mkey">Tap a flower to open it. The size of a flower is the number of papers; each fan of petals is a sub-area; green dots are papers from this week; the buds are open questions.</p>
  <aside id="panel" aria-live="polite"></aside>
 </div>
 <script>
@@ -141,6 +141,7 @@ const POS = {'Shaping model behaviour':[585,205,'in'],'Testing models':[832,190,
 const SPARE = [[250,640,'L'],[1150,640,'R'],[200,760,'L'],[1200,760,'R']];
 
 const DEFS = `
+<filter id="wcp" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="3" seed="8" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G" result="d"/><feGaussianBlur in="d" stdDeviation=".5"/></filter>
 <filter id="wc" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
  <feTurbulence type="fractalNoise" baseFrequency=".011" numOctaves="4" seed="5" result="n"/>
  <feDisplacementMap in="SourceGraphic" in2="n" scale="58" xChannelSelector="R" yChannelSelector="G" result="d"/>
@@ -187,6 +188,16 @@ function parts(n){if(n._parts)return n._parts;
 /* ---------------- drawing ---------------- */
 // A flower: one petal per sub-area, sized by its share; a golden centre (a large pale one for the big flowers, which carry their name).
 // Everything is proportional to r and seeded by the node id, so the small overview flower and the opened one are the same drawing at two sizes.
+const PETALS=(new URLSearchParams(location.search).get('petals')||'fan');
+// broad, rounded petal with a small notch at the tip (cosmos-like)
+function petalRound(a0,a1,r0,r1){const m=(a0+a1)/2,h=Math.max(.14,Math.min(.75,(a1-a0)*.5)),P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2),d=r1-r0;
+  return `M${P(m,r0)} C${P(m-h*1.25,r0+d*.4)} ${P(m-h*1.05,r0+d*.98)} ${P(m-h*.4,r1)} Q${P(m,r1*.9)} ${P(m+h*.4,r1)} C${P(m+h*1.05,r0+d*.98)} ${P(m+h*1.25,r0+d*.4)} ${P(m,r0)}Z`}
+// slender pointed petal (daisy-like), width given as a half-angle
+function petalThin(m,h,r0,r1){const P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2),d=r1-r0;
+  return `M${P(m,r0)} C${P(m-h,r0+d*.3)} ${P(m-h*.8,r0+d*.85)} ${P(m,r1)} C${P(m+h*.8,r0+d*.85)} ${P(m+h,r0+d*.3)} ${P(m,r0)}Z`}
+// loose, rounder blob for the watercolour style
+function petalBlob(a0,a1,r0,r1,R){const m=(a0+a1)/2,h=Math.max(.16,Math.min(.8,(a1-a0)*.55)),P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2),d=r1-r0,j=()=>1+(R()-.5)*.18;
+  return `M${P(m,r0)} C${P(m-h*1.4*j(),r0+d*.35)} ${P(m-h*1.1*j(),r1*1.02)} ${P(m+(R()-.5)*h*.3,r1*j())} C${P(m+h*1.1*j(),r1*1.02)} ${P(m+h*1.4*j(),r0+d*.35)} ${P(m,r0)}Z`}
 function petal(a0,a1,r0,r1){const m=(a0+a1)/2,h=Math.max(.12,Math.min(.62,(a1-a0)*.46)),P=(a,rr)=>(Math.cos(a)*rr).toFixed(2)+','+(Math.sin(a)*rr).toFixed(2);
   return `M${P(m,r0)} C${P(m-h*1.15,r0+(r1-r0)*.32)} ${P(m-h*.8,r1*.96)} ${P(m,r1)} C${P(m+h*.8,r1*.96)} ${P(m+h*1.15,r0+(r1-r0)*.32)} ${P(m,r0)}Z`}
 function drawDisc(g,n,r,hub){const R=rng(hash(n.id)),ps=parts(n),col=d3.color(n.col),id='pg'+hash(n.id)+'_'+Math.round(r),have=!svg.select('#'+id).empty();
@@ -200,13 +211,30 @@ function drawDisc(g,n,r,hub){const R=rng(hash(n.id)),ps=parts(n),col=d3.color(n.
   const many=ps.length>1,petals=many?ps.map(q=>({a0:q.a0,a1:q.a1,share:q.count})):d3.range(7).map(i=>({a0:-Math.PI/2+i*2*Math.PI/7,a1:-Math.PI/2+(i+1)*2*Math.PI/7,share:1}));
   const mx=d3.max(petals,q=>q.share)||1;
   // a lighter inner ring, half a step round, so even a two-petal flower looks full
-  const ring=g.append('g').attr('opacity',.55);
+  const ring=g.append('g').attr('opacity',PETALS==='fan'?0:PETALS==='wash'?.4:.55);if(PETALS==='wash')ring.attr('filter','url(#wcp)');
   petals.forEach(q=>{const w=(q.a1-q.a0),c=q.a0+w;ring.append('path').attr('d',petal(c-w*.5,c+w*.5,r*core*.8,r*(.55+.12*R()))).attr('fill',`url(#${id})`).attr('stroke',edge).attr('stroke-width',.4).attr('stroke-opacity',.35)});
   const front=g.append('g');
+  if(PETALS==='round'){
+    petals.forEach(q=>{const len=(hub?.8:.66)+(hub?.22:.34)*Math.sqrt(q.share/mx),a=q.a0+(q.a1-q.a0)*.02,b=q.a1-(q.a1-q.a0)*.02;
+      front.append('path').attr('d',petalRound(a,b,r*core*.8,r*len*(.97+.05*R()))).attr('fill',`url(#${id})`).attr('stroke',col.darker(.5).formatHex()).attr('stroke-width',1.6).attr('stroke-opacity',.35).attr('stroke-linejoin','round')});
+  }else if(PETALS==='fan'){
+    // each sub-area is a little fan of slender petals: more papers, more petals; neighbouring sub-areas alternate in shade
+    const total=d3.sum(petals,q=>q.share)||1,budget=Math.round(18+r*.28);
+    petals.forEach((q,i)=>{const k=Math.max(2,Math.min(16,Math.round(budget*q.share/total))),span=q.a1-q.a0,h=Math.min(.16,span/k*.42),shade=d3.interpolateRgb(col,'#fffaf0')(i%2?.32:.05),
+      len=(hub?.82:.72)+(hub?.18:.28)*Math.sqrt(q.share/mx);
+      for(let j=0;j<k;j++){const m=q.a0+span*(j+.5)/k;front.append('path').attr('d',petalThin(m,h,r*core*.85,r*len*(.9+.12*R()))).attr('fill',shade).attr('stroke',col.darker(.6).formatHex()).attr('stroke-width',.45).attr('stroke-opacity',.45)}
+      if(petals.length>1)front.append('path').attr('d',`M${Math.cos(q.a0)*r*core},${Math.sin(q.a0)*r*core} L${Math.cos(q.a0)*r*.98},${Math.sin(q.a0)*r*.98}`).attr('stroke',col.darker(.4).formatHex()).attr('stroke-width',.5).attr('stroke-opacity',.25)});
+  }else if(PETALS==='wash'){
+    front.attr('filter','url(#wcp)').style('mix-blend-mode','multiply');
+    petals.forEach(q=>{const len=(hub?.8:.66)+(hub?.22:.34)*Math.sqrt(q.share/mx),a=q.a0+(q.a1-q.a0)*.03,b=q.a1-(q.a1-q.a0)*.03,d=petalBlob(a,b,r*core*.8,r*len,R);
+      front.append('path').attr('d',d).attr('fill',col.formatHex()).attr('opacity',.5);
+      front.append('path').attr('d',d).attr('fill','none').attr('stroke',col.darker(.7).formatHex()).attr('stroke-width',2.2).attr('stroke-opacity',.18)});
+  }else{
   petals.forEach(q=>{const len=(hub?.78:.62)+(hub?.24:.38)*Math.sqrt(q.share/mx),a=q.a0+(q.a1-q.a0)*.04,b=q.a1-(q.a1-q.a0)*.04;
     front.append('path').attr('d',petal(a,b,r*core*.85,r*len*(.97+.05*R()))).attr('fill',`url(#${id})`).attr('fill-opacity',1).attr('stroke',edge).attr('stroke-width',.7).attr('stroke-opacity',.55);
     // a single vein down the middle of each petal
     const m=(a+b)/2;front.append('path').attr('d',`M${Math.cos(m)*r*core},${Math.sin(m)*r*core} L${Math.cos(m)*r*len*.82},${Math.sin(m)*r*len*.82}`).attr('stroke',edge).attr('stroke-width',.45).attr('stroke-opacity',.28).attr('fill','none')});
+  }
   // centre
   if(hub){g.append('circle').attr('r',r*core).attr('fill','#fdf8ec').attr('stroke','#e2b84f').attr('stroke-width',2);
     for(let i=0;i<46;i++){const a=R()*6.283,rr=r*core*(1+.04+R()*.08);g.append('circle').attr('cx',Math.cos(a)*rr).attr('cy',Math.sin(a)*rr).attr('r',1+R()*1.3).attr('fill','#e0a93a').attr('opacity',.8)}}
@@ -278,7 +306,7 @@ function build(){
     show(AREAS[0]);AREAS.forEach(a=>a.g.on('mouseenter',()=>{if(!cur)show(a)}));
     t.append('text').attr('class','meta').attr('y',232).text('Click a flower to open it and read everything inside. Updated '+esc(D.updated)+'.');
     const k=gDeco.append('g').attr('transform','translate(1010,850)');
-    [['disc','The size of a flower is the number of papers (the smallest are drawn a little larger, so they stay readable).'],['crack','Its petals are the sub-areas; a longer petal holds more papers.'],
+    [['disc','The size of a flower is the number of papers (the smallest are drawn a little larger, so they stay readable).'],['crack','Each fan of petals is a sub-area; more petals, more papers.'],
      ['thread','Each bud on a stem is about twelve open questions: what the field has not answered yet.'],['speck','A green dot is a paper that appeared this week.']].forEach((r,i,all)=>{
       const y=all.slice(0,i).reduce((s,q)=>s+wrapWords(q[1],50).length*18+10,0),g=k.append('g').attr('transform',`translate(0,${y})`);
       if(r[0]==='disc'){g.append('circle').attr('cx',9).attr('cy',-4).attr('r',9).attr('fill','#f2b84b').attr('opacity',.35);g.append('circle').attr('cx',9).attr('cy',-4).attr('r',3.2).attr('fill','#f3c95a').attr('stroke','#d9a03a').attr('stroke-width',.6)}
@@ -427,7 +455,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&cur&&document.activeElement.
 addEventListener('hashchange',()=>route());
 let rz,lastM;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if((innerWidth<900)!==lastM){lastM=innerWidth<900;build();const c=cur;cur=null;show(null,c,false)}},150)});
 
-fetch('data.json?v=202611191053').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
+fetch('data.json?v=202611191848').then(r=>{if(!r.ok)throw new Error('data.json: '+r.status);return r.json()}).then(d=>{D=d;prep();document.getElementById('load').remove();lastM=innerWidth<900;build();
   svg.attr('viewBox',`0 0 ${L.W} ${L.Hov}`);const id=decodeURIComponent(location.hash.slice(1));show(null,byId.get(id)||null,false);document.documentElement.setAttribute('data-ready','1')})
  .catch(e=>{document.getElementById('load').textContent='Could not load the map data ('+e.message+'). Try reloading the page.';throw e});
 </script>
